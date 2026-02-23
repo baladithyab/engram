@@ -15,7 +15,7 @@ surrealdb-memory/
 ├── commands/                     ← Slash commands (/remember, /recall, /forget, /memory-status, /memory-setup)
 ├── skills/                       ← Skills (memory-query, memory-admin)
 ├── agents/                       ← Agents (memory-consolidator)
-├── hooks/                        ← Hooks (SessionStart, Stop, PreCompact, PostToolUse)
+├── hooks/                        ← Hooks (Setup, SessionStart, Stop, PreCompact, PostToolUse, SubagentStart, TaskCompleted, TeammateIdle, PermissionRequest)
 │   ├── hooks.json
 │   └── scripts/
 │       ├── config.sh             ← Shared env config for hook scripts
@@ -100,6 +100,44 @@ The `reflect_and_consolidate` tool automates promotion, decay queuing, and dupli
 | `search_knowledge_graph` | Entity search + relationship traversal (1-3 hops) |
 | `reflect_and_consolidate` | Consolidation pipeline: promote, decay, deduplicate |
 
+## Plugin Feature Coverage
+
+### Hook Events Used
+| Event | Type | Purpose |
+|-------|------|---------|
+| Setup | command | Initialize memory database and default config on first run |
+| SessionStart | command | Load project/user memories into context |
+| Stop | prompt | Consolidate session learnings, promote memories |
+| PreCompact | command | Save context before compaction |
+| PostToolUse (Write/Edit) | command | Log file changes to memory |
+| PostToolUse (Bash error) | command | Log errors for debugging memory |
+| SubagentStart | prompt | Brief subagents with relevant memory context |
+| TaskCompleted | prompt | Capture subagent discoveries into memory |
+| TeammateIdle | prompt | Assign memory maintenance to idle agents |
+| PermissionRequest | command | Auto-approve memory MCP tool permissions |
+
+### Agent Features Used
+| Feature | Value | Purpose |
+|---------|-------|---------|
+| memory | project | Persistent project-scoped memory for consolidator |
+| hooks | Stop | Agent-scoped cleanup hook |
+| context | fork | Isolated execution context |
+| tools | restricted | Least-privilege tool access |
+
+### Command Features Used
+| Feature | Purpose |
+|---------|---------|
+| allowed-tools | Restrict each command to relevant MCP tools only |
+| argument-hint | Show argument hints in command palette |
+
+### Skill Features Used
+| Feature | Purpose |
+|---------|---------|
+| Third-person descriptions | Maximize semantic trigger matching |
+| Specific trigger phrases | Surface skills on exact user queries |
+| Progressive disclosure | Metadata always loaded, body on trigger, references on demand |
+| version field | Track skill evolution |
+
 ### SurrealDB Schema
 
 Schema is defined in `mcp/src/schema.ts` and executed by `surrealdb-client.ts` `initSchema()`:
@@ -176,6 +214,7 @@ cd mcp && bun run typecheck
 - [x] PostToolUse hooks (file changes, bash errors)
 - [x] /memory-setup wizard command
 - [x] memory-admin skill
+- [x] SubagentStart hook for memory briefing
 - [ ] Local embedding generation (@xenova/transformers, all-MiniLM-L6-v2)
 - [ ] Hybrid search (BM25 + HNSW via search::rrf)
 - [ ] SessionStart hook: load project memories into context
@@ -184,6 +223,8 @@ cd mcp && bun run typecheck
 - [x] Memory lifecycle state machine (active -> consolidated -> archived -> forgotten)
 - [x] Computed memory_strength with exponential decay
 - [x] Access-based reinforcement (importance bump on recall)
+- [x] TeammateIdle hook for maintenance
+- [x] TaskCompleted hook for capture
 - [ ] Full consolidation pipeline (episodic -> semantic summarization)
 - [ ] Retrieval feedback tracking and strategy adaptation
 - [ ] memory-consolidator agent (full implementation)

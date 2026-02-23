@@ -1,6 +1,8 @@
 ---
 name: forget
 description: Remove a memory from SurrealDB. Soft-deletes by marking as forgotten.
+allowed-tools: ["recall_memories", "forget_memory"]
+argument-hint: "<what to forget>"
 arguments:
   - name: query
     description: Search query to find the memory to forget

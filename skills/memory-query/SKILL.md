@@ -1,10 +1,12 @@
 ---
 name: memory-query
 description: |
-  This skill should be used when querying or searching SurrealDB memories,
-  constructing recall queries, or understanding how to use the memory MCP tools
-  effectively. Triggers on: "search memories", "find in memory", "what do I
-  remember about", "recall", "check memory for".
+  This skill should be used when the user asks to "search memories", "find in memory",
+  "what do I remember about X", "recall past decisions", "check memory for X", or
+  needs guidance on constructing memory queries. Covers: MCP tool usage patterns,
+  memory type selection (episodic/semantic/procedural/working), scope selection
+  (session/project/user), importance scoring, and retrieval strategies (BM25, graph, hybrid).
+version: 0.1.0
 ---
 
 # Memory Query Patterns

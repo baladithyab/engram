@@ -1,6 +1,8 @@
 ---
 name: remember
 description: Store a memory in SurrealDB. Persists knowledge, decisions, patterns, or experiences across sessions.
+allowed-tools: ["store_memory", "recall_memories", "tag_memory"]
+argument-hint: "<what to remember>"
 arguments:
   - name: content
     description: What to remember (optional — if omitted, prompts interactively)

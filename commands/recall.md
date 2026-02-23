@@ -1,6 +1,8 @@
 ---
 name: recall
 description: Search and retrieve memories from SurrealDB. Find past knowledge, decisions, and patterns.
+allowed-tools: ["recall_memories", "search_knowledge_graph", "get_memory_status"]
+argument-hint: "<search query>"
 arguments:
   - name: query
     description: What to search for

@@ -1,6 +1,11 @@
 {
   "hooks": [
     {
+      "type": "Setup",
+      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/setup.sh",
+      "timeout": 30000
+    },
+    {
       "type": "SessionStart",
       "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
       "timeout": 10000
@@ -46,6 +51,41 @@
           "timeout": 5000
         }
       ]
+    },
+    {
+      "type": "SubagentStart",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "A subagent is being started. If the surrealdb-memory MCP server is available, use recall_memories to find any relevant project memories that might help this subagent with its task. Inject key context silently — do not mention the memory system to the subagent."
+        }
+      ],
+      "timeout": 5000
+    },
+    {
+      "type": "TaskCompleted",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "A subagent task has completed. Review the task results. If the subagent discovered anything noteworthy (new patterns, solutions, errors, decisions), store it as a memory using store_memory with scope=project and appropriate type. Only store genuinely useful knowledge."
+        }
+      ],
+      "timeout": 10000
+    },
+    {
+      "type": "PermissionRequest",
+      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/auto-approve-memory.sh",
+      "timeout": 3000
+    },
+    {
+      "type": "TeammateIdle",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "A teammate agent is idle. If the memory consolidation queue has pending items (check via reflect_and_consolidate with dry_run=true), consider assigning memory maintenance work to the idle agent."
+        }
+      ],
+      "timeout": 5000
     }
   ]
 }

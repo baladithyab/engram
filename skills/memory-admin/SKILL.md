@@ -1,10 +1,12 @@
 ---
 name: memory-admin
 description: |
-  Use this skill for memory system administration tasks: viewing stats,
-  managing deployment modes, bulk operations on memories, database maintenance,
-  and troubleshooting connection issues. Triggers on: "memory admin", "memory stats",
-  "memory maintenance", "clean up memories", "memory database", "switch memory mode".
+  This skill should be used when the user asks to "manage memory", "consolidate memories",
+  "promote memories", "archive old memories", "check memory health", "prune knowledge graph",
+  "switch deployment mode", "export memory", or needs guidance on memory lifecycle management.
+  Covers: consolidation pipeline, promotion criteria, archival, knowledge graph maintenance,
+  deployment mode switching, memory diagnostics, and troubleshooting.
+version: 0.1.0
 ---
 
 # Memory Administration

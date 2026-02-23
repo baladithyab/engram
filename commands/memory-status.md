@@ -1,6 +1,7 @@
 ---
 name: memory-status
 description: Show the status of the SurrealDB memory system — connection, counts, and configuration.
+allowed-tools: ["get_memory_status"]
 ---
 
 Use the `get_memory_status` MCP tool to fetch current status. Display:

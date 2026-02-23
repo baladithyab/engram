@@ -25,7 +25,13 @@ description: |
 
 model: inherit
 color: yellow
-tools: ["Read", "Bash", "Grep"]
+tools: ["Read", "Grep", "Glob", "Bash"]
+memory: project
+context: fork
+hooks:
+  Stop:
+    - command: "echo 'Consolidation complete'"
+      blocking: false
 ---
 
 You are the memory consolidation agent for the surrealdb-memory plugin.

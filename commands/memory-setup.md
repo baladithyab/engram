@@ -1,6 +1,8 @@
 ---
 name: memory-setup
 description: Interactive setup wizard for the SurrealDB memory system. Configures deployment mode, connection settings, and verifies connectivity.
+allowed-tools: ["get_memory_status", "store_memory"]
+argument-hint: "[embedded|local|docker|remote|memory]"
 ---
 
 Run the SurrealDB memory setup wizard. Walk the user through these steps:

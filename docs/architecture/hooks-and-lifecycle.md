@@ -35,18 +35,25 @@ not required for the system to function.
 
 ## Hook Event Map
 
-The plugin currently defines three hooks. The full design (in research) specifies
-additional hooks for future phases.
+The plugin defines 10 hook events covering the full session lifecycle: initialization,
+context loading, file/error tracking, subagent coordination, and session cleanup.
 
-### Current Implementation (Phase 1)
+### Implemented
 
 | Hook Event | Type | Timeout | Purpose |
 |------------|------|---------|---------|
+| `Setup` | command | 30s | Initialize memory database and default config on first run |
 | `SessionStart` | command | 10s | Load project + user memories into context |
 | `Stop` | prompt | 30s | Consolidate session learnings before exit |
 | `PreCompact` | command | 15s | Save context before compaction discards it |
+| `PostToolUse (Write/Edit)` | command | 5s | Store file change as episodic memory |
+| `PostToolUse (Bash error)` | command | 5s | Store command errors for debugging memory |
+| `SubagentStart` | prompt | 10s | Brief subagents with relevant memory context |
+| `TaskCompleted` | prompt | 15s | Capture subagent discoveries into memory |
+| `TeammateIdle` | prompt | 15s | Assign memory maintenance to idle agents |
+| `PermissionRequest` | command | 5s | Auto-approve memory MCP tool permissions |
 
-### Planned (Phase 2+)
+### Planned (Future)
 
 | Hook Event | Type | Timeout | Purpose |
 |------------|------|---------|---------|
@@ -55,8 +62,6 @@ additional hooks for future phases.
 | `PreToolUse (Write/Edit)` | prompt | 3s | Check memory for coding conventions for the file |
 | `PreToolUse (Bash)` | prompt | 3s | Check memory for past outcomes of similar commands |
 | `PreToolUse (Task)` | prompt | 5s | Inject relevant memories for subagent context |
-| `PostToolUse (Write/Edit)` | command | 5s | Store file change as episodic memory |
-| `PostToolUse (Bash)` | command | 5s | Store command outcome (especially errors) |
 
 ---
 
@@ -184,51 +189,120 @@ times. Without this hook, Claude loses track of earlier context.
 
 ---
 
-## PostToolUse Hooks (Planned)
+## Setup Hook
+
+**Purpose:** Initialize the memory database and default configuration on first run.
+Ensures SurrealDB data directory exists, the schema is applied, and default config
+is written before any other hooks attempt to read or write memories.
+
+This hook runs once per plugin installation. It is idempotent -- running it again
+on an already-initialized database is safe (schema DDL uses `DEFINE ... IF NOT EXISTS`).
+
+**Trigger:** The `Setup` event fires when the plugin is first loaded by Claude Code.
+
+---
+
+## PostToolUse Hooks
 
 ### After Write/Edit
 
 Store file changes as episodic memories, capturing what was changed and why.
 
-```json
-{
-  "matcher": "Write|Edit",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-write.sh",
-      "timeout": 5
-    }
-  ]
-}
-```
+**Current implementation** (`hooks/scripts/post-file-change.sh`):
 
-The script captures:
-- File path that was modified
-- Summary of the change
-- Stored as `episodic` memory with `scope=session`
-- Tagged with file path for later retrieval
+The script receives `$TOOL_NAME` and `$TOOL_INPUT` as arguments, extracts the file
+path, and stores an episodic memory with `scope=session` tagged with the file path
+for later retrieval.
 
-### After Bash
+### After Bash (errors only)
 
-Store command outcomes, especially errors and their resolutions.
+Store failed command outcomes for debugging memory. Only fires when the Bash tool
+exits with a non-zero exit code (`exitCode: "!0"` matcher).
 
-```json
-{
-  "matcher": "Bash",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-bash.sh",
-      "timeout": 5
-    }
-  ]
-}
-```
+**Current implementation** (`hooks/scripts/post-bash-error.sh`):
 
-Failed commands are stored with higher importance, tagged with `debugging`. When the
-same command is run in a future session, the `PreToolUse (Bash)` hook retrieves the
-past failure and injects a warning.
+The script receives `$TOOL_INPUT` and `$TOOL_OUTPUT`, stores the error as an episodic
+memory with higher importance, tagged with `debugging`. When the same command is run
+in a future session, the `PreToolUse (Bash)` hook (planned) will retrieve the past
+failure and inject a warning.
+
+---
+
+## SubagentStart Hook
+
+**Purpose:** Brief subagents with relevant memory context when they are spawned. When
+Claude Code creates a subagent (via the Task tool), this prompt hook injects a curated
+summary of project memories so the subagent starts with accumulated project knowledge
+rather than a blank slate.
+
+**How it works:**
+
+1. Claude Code fires `SubagentStart` when a new subagent is created.
+2. The prompt instructs the subagent to call `recall_memories` for context relevant
+   to its assigned task.
+3. The subagent begins work already aware of project conventions, past decisions,
+   and known pitfalls.
+
+**Effect:** Subagents produce higher-quality work because they inherit the parent
+session's accumulated knowledge instead of rediscovering it from scratch.
+
+---
+
+## TaskCompleted Hook
+
+**Purpose:** Capture subagent discoveries into persistent memory when a task finishes.
+Subagents often discover new patterns, encounter errors, or learn conventions that
+should be preserved for future sessions.
+
+**How it works:**
+
+1. Claude Code fires `TaskCompleted` when a subagent finishes its assigned task.
+2. The prompt instructs the parent session to review what the subagent accomplished
+   and store valuable discoveries as project-scoped memories.
+3. Memories are classified by type (semantic, procedural, episodic) and stored with
+   appropriate tags.
+
+**Effect:** Knowledge discovered by subagents is not lost when they terminate. The
+parent session (and future sessions) benefit from subagent learnings.
+
+---
+
+## TeammateIdle Hook
+
+**Purpose:** Assign memory maintenance work to idle agents in a team. When a teammate
+has no pending tasks, this hook prompts it to perform memory housekeeping: running
+consolidation, deduplicating memories, promoting high-value session memories to
+project scope, or archiving stale entries.
+
+**How it works:**
+
+1. Claude Code fires `TeammateIdle` when a teammate agent has no assigned tasks.
+2. The prompt suggests memory maintenance operations the idle agent can perform.
+3. The agent calls `reflect_and_consolidate` or other memory tools to clean up
+   the memory store.
+
+**Effect:** Memory quality improves over time without dedicated maintenance sessions.
+Idle compute is redirected toward memory hygiene.
+
+---
+
+## PermissionRequest Hook
+
+**Purpose:** Auto-approve permission requests for memory MCP tools. Without this hook,
+Claude Code would prompt the user each time a hook-triggered action calls an MCP tool,
+breaking the "invisible by default" principle.
+
+**How it works:**
+
+1. Claude Code fires `PermissionRequest` when an MCP tool call needs user approval.
+2. The command script checks if the requested tool belongs to the surrealdb-memory
+   MCP server.
+3. If it does, the script exits 0 (approve). Otherwise it exits 1 (defer to user).
+
+**Note:** This only auto-approves the plugin's own MCP tools. All other tool
+permissions still require explicit user approval. This follows the principle of
+least privilege -- the memory system should not need manual approval to do its own
+bookkeeping.
 
 ---
 
@@ -240,6 +314,9 @@ Hooks and MCP tools form a closed loop:
   Hooks fire automatically           MCP tools execute the work
   at lifecycle moments               against SurrealDB
 ┌─────────────────────┐          ┌─────────────────────────┐
+│  Setup              │─────────>│  (schema init)          │
+│  (first-run init)   │          │  (default config)       │
+│                     │          │                         │
 │  SessionStart       │─────────>│  recall_memories        │
 │  (load context)     │          │  (query project scope)  │
 │                     │          │                         │
@@ -252,8 +329,17 @@ Hooks and MCP tools form a closed loop:
 │  PostToolUse        │─────────>│  store_memory           │
 │  (capture outcomes) │          │  (write episodic)       │
 │                     │          │                         │
-│  PreToolUse         │─────────>│  recall_memories        │
-│  (inject context)   │          │  (query for file/cmd)   │
+│  SubagentStart      │─────────>│  recall_memories        │
+│  (brief subagents)  │          │  (query for task)       │
+│                     │          │                         │
+│  TaskCompleted      │─────────>│  store_memory           │
+│  (capture findings) │          │  (write from subagent)  │
+│                     │          │                         │
+│  TeammateIdle       │─────────>│  reflect_and_consolidate│
+│  (maintenance)      │          │  (cleanup + merge)      │
+│                     │          │                         │
+│  PermissionRequest  │─────────>│  (auto-approve own      │
+│  (auto-approve)     │          │   MCP tools)            │
 └─────────────────────┘          └─────────────────────────┘
 ```
 
@@ -305,12 +391,14 @@ moments:
 
 | Lifecycle Stage | Responsible Hook | What Happens |
 |----------------|-----------------|--------------|
-| **Creation** | Stop, PostToolUse | New memories created from session activity |
-| **Retrieval** | SessionStart, PreToolUse, UserPromptSubmit | Memories recalled and injected into context |
+| **Initialization** | Setup | Database created, schema applied, default config written |
+| **Creation** | Stop, PostToolUse, TaskCompleted | New memories created from session activity and subagent discoveries |
+| **Retrieval** | SessionStart, SubagentStart | Memories recalled and injected into context |
 | **Strengthening** | (automatic on retrieval) | `access_count` incremented, `last_accessed_at` updated |
-| **Consolidation** | Stop (via memory-consolidator) | Similar memories merged, episodic compressed to semantic |
+| **Consolidation** | Stop (via memory-consolidator), TeammateIdle | Similar memories merged, episodic compressed to semantic |
 | **Promotion** | Stop | Session memories meeting criteria promoted to project scope |
-| **Pruning** | (SurrealDB DEFINE EVENT) | Low-strength memories archived, then forgotten |
+| **Pruning** | TeammateIdle, (SurrealDB DEFINE EVENT) | Low-strength memories archived, then forgotten |
+| **Permission** | PermissionRequest | Memory MCP tools auto-approved without user prompts |
 
 The full memory lifecycle state machine is documented in [Memory Model](memory-model.md).
 
@@ -318,34 +406,21 @@ The full memory lifecycle state machine is documented in [Memory Model](memory-m
 
 ## hooks.json Reference
 
-The current `hooks/hooks.json` configuration:
+The current `hooks/hooks.json` configuration defines 10 hook events. See the actual
+file at `hooks/hooks.json` for the full JSON. Summary of entries:
 
-```json
-{
-  "hooks": [
-    {
-      "type": "SessionStart",
-      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
-      "timeout": 10000
-    },
-    {
-      "type": "Stop",
-      "hooks": [
-        {
-          "type": "prompt",
-          "prompt": "Before ending this session, review what was accomplished and store key learnings as memories using the store_memory MCP tool. Focus on: (1) decisions made and their rationale, (2) patterns discovered in the codebase, (3) errors encountered and how they were fixed, (4) conventions learned. Store each as a separate memory with appropriate type (semantic for facts, procedural for patterns, episodic for events) and scope=project. Only store genuinely useful knowledge, not trivial operations."
-        }
-      ],
-      "timeout": 30000
-    },
-    {
-      "type": "PreCompact",
-      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact.sh",
-      "timeout": 15000
-    }
-  ]
-}
-```
+| Hook Event | Type | Script/Prompt | Timeout |
+|------------|------|---------------|---------|
+| Setup | command | `hooks/scripts/setup.sh` | 30s |
+| SessionStart | command | `hooks/scripts/session-start.sh` | 10s |
+| Stop | prompt | Inline consolidation prompt | 30s |
+| PreCompact | command | `hooks/scripts/pre-compact.sh` | 15s |
+| PostToolUse (Write/Edit) | command | `hooks/scripts/post-file-change.sh` | 5s |
+| PostToolUse (Bash error) | command | `hooks/scripts/post-bash-error.sh` | 5s |
+| SubagentStart | prompt | Inline memory briefing prompt | 10s |
+| TaskCompleted | prompt | Inline discovery capture prompt | 15s |
+| TeammateIdle | prompt | Inline maintenance prompt | 15s |
+| PermissionRequest | command | `hooks/scripts/auto-approve-memory.sh` | 5s |
 
 ### Hook Execution Model
 
