@@ -15,6 +15,14 @@ if [ -f "$CONFIG_FILE" ]; then
   exit 0
 fi
 
+# --- Generate scope identifiers ---
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+PROJECT_ID="p_$(echo -n "$PROJECT_DIR" | shasum -a 256 | cut -c1-12)"
+USER_ID="u_$(echo -n "$HOME" | shasum -a 256 | cut -c1-12)"
+
+log_info "Scope IDs: project=$PROJECT_ID, user=$USER_ID"
+
 # --- Auto-detect best deployment mode ---
 
 DETECTED_MODE="embedded"
@@ -51,7 +59,8 @@ url: ws://localhost:8000
 username: root
 password: root
 namespace: memory
-database: default
+project_id: ${PROJECT_ID}
+user_id: ${USER_ID}
 ---
 
 # SurrealDB Memory Configuration
@@ -60,6 +69,14 @@ Auto-configured on ${CURRENT_DATE} by surrealdb-memory plugin.
 Detected local SurrealDB instance at localhost:8000.
 
 ${DETECTED_NOTES}
+
+## Scope Identifiers (auto-generated, do not edit)
+- **Project ID:** \`${PROJECT_ID}\` (derived from project path)
+- **User ID:** \`${USER_ID}\` (derived from home directory)
+- **Session ID:** generated per-session from CLAUDE_SESSION_ID
+
+These IDs isolate memory: each project gets its own database,
+each user gets their own database, each session is ephemeral.
 
 Edit the YAML frontmatter above to change settings.
 Run /memory-setup to reconfigure interactively.
@@ -70,7 +87,8 @@ else
 mode: embedded
 data_path: ~/.claude/surrealdb-memory/data
 namespace: memory
-database: default
+project_id: ${PROJECT_ID}
+user_id: ${USER_ID}
 ---
 
 # SurrealDB Memory Configuration
@@ -79,6 +97,14 @@ Auto-configured on ${CURRENT_DATE} by surrealdb-memory plugin.
 Using embedded SurrealKV (zero-config, persistent).
 
 ${DETECTED_NOTES}
+
+## Scope Identifiers (auto-generated, do not edit)
+- **Project ID:** \`${PROJECT_ID}\` (derived from project path)
+- **User ID:** \`${USER_ID}\` (derived from home directory)
+- **Session ID:** generated per-session from CLAUDE_SESSION_ID
+
+These IDs isolate memory: each project gets its own database,
+each user gets their own database, each session is ephemeral.
 
 Edit the YAML frontmatter above to change settings.
 Run /memory-setup to reconfigure interactively.
