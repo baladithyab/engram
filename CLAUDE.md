@@ -60,31 +60,46 @@ surrealdb-memory/
 Mode is set via `SURREAL_MODE` env var, `.mcp.json`, or `.claude/surrealdb-memory.local.md`.
 Use `/memory-setup` to configure interactively.
 
-### Memory Model
+### Memory Model — Hierarchical Scoping
 
-Three scopes with promotion:
-- **Session** — ephemeral, dies when conversation ends unless promoted
-- **Project** — persists across sessions for this codebase
-- **User** — persists across all projects
+Each scope maps to its own SurrealDB database within the `memory` namespace:
 
-Four types:
-- **Episodic** — events, conversations, experiences
-- **Semantic** — facts, knowledge, concepts
-- **Procedural** — skills, patterns, how-tos
-- **Working** — temporary task context
+| Scope | Database ID | Persists | Content |
+|-------|------------|----------|---------|
+| **User** | `u_{sha256(HOME)[:12]}` | Across all projects | Preferences, cross-project patterns, tool expertise |
+| **Project** | `p_{sha256(project_path)[:12]}` | Across sessions in one project | Architecture, conventions, decisions, error patterns |
+| **Session** | `s_{CLAUDE_SESSION_ID}` | Current conversation only | Working memory, scratchpad, task context |
 
-### Memory Lifecycle
+Promotion flow: **session → project → user** (based on importance and access frequency).
+Retrieval searches all scopes with weighted priority: session ×1.5, project ×1.0, user ×0.7.
 
-Memories follow a state machine: `active` -> `consolidated` -> `archived` -> `forgotten`
+Four memory types, each with different decay rates:
 
-- **Active** — default state, searchable, decays over time
-- **Consolidated** — merged or summarized from multiple memories
-- **Archived** — low-importance or stale, excluded from default search
-- **Forgotten** — soft-deleted, retained for audit but not searchable
+| Type | Half-Life | Use For |
+|------|-----------|---------|
+| **Working** | 1 hour | Current task context, scratchpad |
+| **Episodic** | 1 day | Events, conversations, error resolutions |
+| **Semantic** | 7 days | Facts, architecture decisions, conventions |
+| **Procedural** | 30 days | Skills, patterns, how-to knowledge |
 
-Strength decays exponentially based on type (working decays fastest, procedural slowest).
-Access-based reinforcement: each recall bumps importance by 0.02 (capped at 1.0).
-The `reflect_and_consolidate` tool automates promotion, decay queuing, and duplicate detection.
+### Memory Lifecycle (MemEvolve EURM)
+
+The hook pipeline implements MemEvolve's EURM framework:
+
+| EURM Module | Plugin Implementation |
+|-------------|---------------------|
+| **Encode** | Stop hook, PostToolUse hooks, PreCompact hook, TaskCompleted hook |
+| **Update/Store** | `store_memory` routes to correct scope database |
+| **Retrieve** | SessionStart context injection, `recall_memories` cross-scope search |
+| **Manage** | `reflect_and_consolidate`, TeammateIdle hook, computed decay |
+
+Lifecycle states: `active` → `consolidated` → `archived` → `forgotten`
+- Each recall **strengthens** the memory (extends effective half-life by 20%)
+- Stop hook runs ENCODE + MANAGE (store learnings, then consolidate)
+- PreCompact hook runs ENCODE (save context before compaction)
+- SessionStart hook runs RETRIEVE (prime context from all scopes)
+
+See [docs/architecture/memevolve-integration.md](docs/architecture/memevolve-integration.md) for the complete EURM mapping.
 
 ### MCP Tools
 
