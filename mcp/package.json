@@ -1,0 +1,19 @@
+{
+  "name": "surrealdb-memory-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for SurrealDB-backed Claude Code memory",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "surrealdb": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7"
+  }
+}

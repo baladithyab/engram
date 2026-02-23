@@ -1,0 +1,24 @@
+{
+  "hooks": [
+    {
+      "type": "SessionStart",
+      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+      "timeout": 10000
+    },
+    {
+      "type": "Stop",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Before ending this session, review what was accomplished and store key learnings as memories using the store_memory MCP tool. Focus on: (1) decisions made and their rationale, (2) patterns discovered in the codebase, (3) errors encountered and how they were fixed, (4) conventions learned. Store each as a separate memory with appropriate type (semantic for facts, procedural for patterns, episodic for events) and scope=project. Only store genuinely useful knowledge, not trivial operations."
+        }
+      ],
+      "timeout": 30000
+    },
+    {
+      "type": "PreCompact",
+      "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact.sh",
+      "timeout": 15000
+    }
+  ]
+}

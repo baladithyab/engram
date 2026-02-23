@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+mcp/bun.lockb
+
+# SurrealDB data files (local development)
+*.db
+data/
+
+# Plugin local config (user-specific)
+.claude/surrealdb-memory.local.md

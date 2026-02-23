@@ -1,0 +1,8 @@
+{
+  "name": "surrealdb-memory",
+  "version": "0.1.0",
+  "description": "Persistent, hierarchical, self-evolving memory for Claude Code powered by SurrealDB",
+  "author": "baladita",
+  "hooks": "hooks/hooks.json",
+  "mcpServers": ".mcp.json"
+}
