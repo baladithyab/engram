@@ -1,13 +1,84 @@
 import Surreal from "surrealdb";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { ALL_SCHEMA_SQL } from "./schema.js";
+
+export type DeploymentMode = "embedded" | "local" | "remote" | "memory";
 
 export interface SurrealDBConfig {
-  mode: "embedded" | "local" | "remote";
+  mode: DeploymentMode;
   dataPath?: string;
   url?: string;
   username: string;
   password: string;
   namespace: string;
   database: string;
+}
+
+/**
+ * Read plugin config from .claude/surrealdb-memory.local.md YAML frontmatter.
+ * Returns partial config — caller merges with defaults.
+ */
+export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
+  const roots = [
+    projectRoot,
+    process.env.CLAUDE_PROJECT_ROOT,
+    process.cwd(),
+  ].filter(Boolean) as string[];
+
+  for (const root of roots) {
+    const configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    if (!existsSync(configPath)) continue;
+
+    try {
+      const raw = readFileSync(configPath, "utf-8");
+      // Parse YAML frontmatter between --- delimiters
+      const match = raw.match(/^---\n([\s\S]*?)\n---/);
+      if (!match) continue;
+
+      const yaml = match[1];
+      const config: Partial<SurrealDBConfig> = {};
+
+      for (const line of yaml.split("\n")) {
+        const [key, ...rest] = line.split(":");
+        const value = rest.join(":").trim();
+        if (!key || !value) continue;
+
+        const k = key.trim();
+        switch (k) {
+          case "mode":
+            if (["embedded", "local", "remote", "memory"].includes(value)) {
+              config.mode = value as DeploymentMode;
+            }
+            break;
+          case "url":
+            config.url = value;
+            break;
+          case "data_path":
+            config.dataPath = value;
+            break;
+          case "username":
+            config.username = value;
+            break;
+          case "password":
+            config.password = value;
+            break;
+          case "namespace":
+            config.namespace = value;
+            break;
+          case "database":
+            config.database = value;
+            break;
+        }
+      }
+
+      return config;
+    } catch {
+      // Config file unreadable — continue with defaults
+    }
+  }
+
+  return {};
 }
 
 export class SurrealDBClient {
@@ -25,14 +96,20 @@ export class SurrealDBClient {
 
     try {
       await this.db.connect(endpoint);
-      await this.db.signin({
-        username: this.config.username,
-        password: this.config.password,
-      });
+
+      // Memory mode doesn't need auth in SurrealDB embedded
+      if (this.config.mode !== "memory") {
+        await this.db.signin({
+          username: this.config.username,
+          password: this.config.password,
+        });
+      }
+
       await this.db.use({
         namespace: this.config.namespace,
         database: this.config.database,
       });
+
       this.connected = true;
     } catch (err) {
       console.error(`Failed to connect to SurrealDB (${this.config.mode}):`, err);
@@ -44,80 +121,25 @@ export class SurrealDBClient {
     switch (this.config.mode) {
       case "embedded":
         // SurrealKV embedded — persistent, zero-config
-        return `surrealkv://${this.config.dataPath}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
       case "local":
+        // Local SurrealDB server via WebSocket
         return this.config.url ?? "ws://localhost:8000";
       case "remote":
+        // Remote/cloud SurrealDB via secure WebSocket
         return this.config.url ?? "wss://cloud.surrealdb.com";
+      case "memory":
+        // In-memory mode — fast, ephemeral (data lost on close unless exported)
+        return "mem://";
       default:
-        return `surrealkv://${this.config.dataPath}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
     }
   }
 
   async initSchema(): Promise<void> {
-    // Core memory table
-    await this.db.query(`
-      DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;
-
-      DEFINE FIELD IF NOT EXISTS content ON memory TYPE string;
-      DEFINE FIELD IF NOT EXISTS memory_type ON memory TYPE string
-        ASSERT $value IN ['episodic', 'semantic', 'procedural', 'working'];
-      DEFINE FIELD IF NOT EXISTS scope ON memory TYPE string
-        ASSERT $value IN ['session', 'project', 'user'];
-      DEFINE FIELD IF NOT EXISTS tags ON memory TYPE array<string> DEFAULT [];
-      DEFINE FIELD IF NOT EXISTS embedding ON memory TYPE option<array<float>>;
-      DEFINE FIELD IF NOT EXISTS importance ON memory TYPE float DEFAULT 0.5;
-      DEFINE FIELD IF NOT EXISTS confidence ON memory TYPE float DEFAULT 0.7;
-      DEFINE FIELD IF NOT EXISTS access_count ON memory TYPE int DEFAULT 0;
-      DEFINE FIELD IF NOT EXISTS status ON memory TYPE string DEFAULT 'active'
-        ASSERT $value IN ['active', 'consolidated', 'archived', 'forgotten'];
-      DEFINE FIELD IF NOT EXISTS created_at ON memory TYPE datetime DEFAULT time::now();
-      DEFINE FIELD IF NOT EXISTS updated_at ON memory TYPE datetime DEFAULT time::now();
-      DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE datetime DEFAULT time::now();
-      DEFINE FIELD IF NOT EXISTS metadata ON memory FLEXIBLE TYPE option<object>;
-
-      DEFINE INDEX IF NOT EXISTS memory_scope ON memory FIELDS scope;
-      DEFINE INDEX IF NOT EXISTS memory_type_idx ON memory FIELDS memory_type;
-      DEFINE INDEX IF NOT EXISTS memory_status ON memory FIELDS status;
-    `);
-
-    // Entity table for knowledge graph
-    await this.db.query(`
-      DEFINE TABLE IF NOT EXISTS entity SCHEMAFULL;
-
-      DEFINE FIELD IF NOT EXISTS name ON entity TYPE string;
-      DEFINE FIELD IF NOT EXISTS entity_type ON entity TYPE string;
-      DEFINE FIELD IF NOT EXISTS description ON entity TYPE string DEFAULT '';
-      DEFINE FIELD IF NOT EXISTS embedding ON entity TYPE option<array<float>>;
-      DEFINE FIELD IF NOT EXISTS mention_count ON entity TYPE int DEFAULT 1;
-      DEFINE FIELD IF NOT EXISTS confidence ON entity TYPE float DEFAULT 0.7;
-      DEFINE FIELD IF NOT EXISTS scope ON entity TYPE string;
-      DEFINE FIELD IF NOT EXISTS created_at ON entity TYPE datetime DEFAULT time::now();
-      DEFINE FIELD IF NOT EXISTS updated_at ON entity TYPE datetime DEFAULT time::now();
-
-      DEFINE INDEX IF NOT EXISTS entity_name ON entity FIELDS name;
-      DEFINE INDEX IF NOT EXISTS entity_type_idx ON entity FIELDS entity_type;
-    `);
-
-    // Relationship edge table
-    await this.db.query(`
-      DEFINE TABLE IF NOT EXISTS relates_to TYPE RELATION FROM entity TO entity SCHEMAFULL;
-
-      DEFINE FIELD IF NOT EXISTS relation_type ON relates_to TYPE string;
-      DEFINE FIELD IF NOT EXISTS weight ON relates_to TYPE float DEFAULT 0.5;
-      DEFINE FIELD IF NOT EXISTS confidence ON relates_to TYPE float DEFAULT 0.7;
-      DEFINE FIELD IF NOT EXISTS scope ON relates_to TYPE string;
-      DEFINE FIELD IF NOT EXISTS created_at ON relates_to TYPE datetime DEFAULT time::now();
-    `);
-
-    // Full-text search analyzer
-    await this.db.query(`
-      DEFINE ANALYZER IF NOT EXISTS memory_analyzer TOKENIZERS blank, class
-        FILTERS ascii, lowercase, snowball(english);
-
-      DEFINE INDEX IF NOT EXISTS memory_content_search ON memory
-        FIELDS content SEARCH ANALYZER memory_analyzer BM25;
-    `);
+    for (const sql of ALL_SCHEMA_SQL) {
+      await this.db.query(sql);
+    }
   }
 
   async query<T = unknown>(surql: string, vars?: Record<string, unknown>): Promise<T[]> {
@@ -229,8 +251,61 @@ export class SurrealDBClient {
     };
   }
 
+  /**
+   * Close the database connection.
+   * If mode is "memory", exports all data as JSON to the data path for snapshot persistence.
+   */
   async close(): Promise<void> {
+    if (this.connected && this.config.mode === "memory") {
+      await this.exportMemorySnapshot();
+    }
     await this.db.close();
     this.connected = false;
+  }
+
+  /**
+   * Export all memory data as a JSON snapshot (used by memory mode for persistence).
+   * Writes to {dataPath}/snapshot.json.
+   */
+  private async exportMemorySnapshot(): Promise<void> {
+    try {
+      const dataPath = this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`;
+      const { mkdirSync, writeFileSync } = await import("node:fs");
+
+      mkdirSync(dataPath, { recursive: true });
+
+      const [memories] = await this.db.query("SELECT * FROM memory WHERE status != 'forgotten'");
+      const [entities] = await this.db.query("SELECT * FROM entity");
+      const [relations] = await this.db.query("SELECT * FROM relates_to");
+
+      const snapshot = {
+        exported_at: new Date().toISOString(),
+        mode: this.config.mode,
+        memories,
+        entities,
+        relations,
+      };
+
+      writeFileSync(
+        join(dataPath, "snapshot.json"),
+        JSON.stringify(snapshot, null, 2),
+        "utf-8"
+      );
+    } catch (err) {
+      console.error("Failed to export memory snapshot:", err);
+    }
+  }
+
+  /** Get the raw Surreal instance for advanced queries */
+  get raw(): Surreal {
+    return this.db;
+  }
+
+  get isConnected(): boolean {
+    return this.connected;
+  }
+
+  get currentMode(): DeploymentMode {
+    return this.config.mode;
   }
 }

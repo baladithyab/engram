@@ -12,18 +12,28 @@ stack used by other memory systems.
 surrealdb-memory/
 ├── .claude-plugin/plugin.json    ← Plugin manifest
 ├── .mcp.json                     ← MCP server config
-├── commands/                     ← Slash commands (/remember, /recall, /forget, /memory-status)
-├── skills/                       ← Skills (memory-query)
+├── commands/                     ← Slash commands (/remember, /recall, /forget, /memory-status, /memory-setup)
+├── skills/                       ← Skills (memory-query, memory-admin)
 ├── agents/                       ← Agents (memory-consolidator)
-├── hooks/                        ← Hooks (SessionStart, Stop, PreCompact)
+├── hooks/                        ← Hooks (SessionStart, Stop, PreCompact, PostToolUse)
 │   ├── hooks.json
 │   └── scripts/
+│       ├── config.sh             ← Shared env config for hook scripts
+│       ├── session-start.sh      ← Load project memories on session start
+│       ├── pre-compact.sh        ← Preserve context before compaction
+│       ├── post-file-change.sh   ← Log file changes (Write/Edit)
+│       └── post-bash-error.sh    ← Log bash errors for memory
+├── docs/                         ← Documentation (32 docs total)
+│   ├── research/                 ← 22 research docs (SurrealDB features, memory theory, plugin design)
+│   ├── architecture/             ← 5 design docs (overview, memory model, knowledge graph, hooks, deployment)
+│   └── guides/                   ← 5 user guides (getting started, configuration, deployment, dev, best practices)
 └── mcp/                          ← MCP server (Bun + TypeScript)
     ├── package.json
     ├── tsconfig.json
     └── src/
         ├── index.ts              ← Server entry point
-        ├── surrealdb-client.ts   ← SurrealDB connection wrapper
+        ├── schema.ts             ← SurrealQL schema definitions (all tables, indexes, events)
+        ├── surrealdb-client.ts   ← SurrealDB connection wrapper + config reader
         ├── tools.ts              ← MCP tool definitions
         └── resources.ts          ← MCP resource definitions
 ```
@@ -33,8 +43,22 @@ surrealdb-memory/
 - **Runtime:** Bun + TypeScript for the MCP server
 - **Database:** SurrealDB 3.0 via `surrealdb` npm package
 - **Default mode:** Embedded SurrealKV (`surrealkv://` path) — zero config, persistent
-- **Search:** BM25 full-text search (MVP), HNSW vector search (Phase 2)
-- **Embeddings:** Deferred to Phase 2 (local all-MiniLM-L6-v2 via @xenova/transformers)
+- **Schema:** All SurrealQL DDL lives in `mcp/src/schema.ts` as exported constants
+- **Search:** BM25 full-text search + HNSW vector indexes defined (embeddings deferred)
+- **Embeddings:** Phase 2 (local all-MiniLM-L6-v2 via @xenova/transformers)
+- **Config:** Per-project overrides via `.claude/surrealdb-memory.local.md` YAML frontmatter
+
+### Deployment Modes
+
+| Mode | Endpoint | Persistence | Use Case |
+|------|----------|-------------|----------|
+| `embedded` | `surrealkv://{data_path}` | Persistent file-based | Default, single machine |
+| `memory` | `mem://` | Ephemeral (snapshot on close) | Testing, CI |
+| `local` | `ws://localhost:8000` | Server-managed | Shared dev, RocksDB backend |
+| `remote` | `wss://...` | Cloud-managed | Team use, production |
+
+Mode is set via `SURREAL_MODE` env var, `.mcp.json`, or `.claude/surrealdb-memory.local.md`.
+Use `/memory-setup` to configure interactively.
 
 ### Memory Model
 
@@ -49,6 +73,19 @@ Four types:
 - **Procedural** — skills, patterns, how-tos
 - **Working** — temporary task context
 
+### Memory Lifecycle
+
+Memories follow a state machine: `active` -> `consolidated` -> `archived` -> `forgotten`
+
+- **Active** — default state, searchable, decays over time
+- **Consolidated** — merged or summarized from multiple memories
+- **Archived** — low-importance or stale, excluded from default search
+- **Forgotten** — soft-deleted, retained for audit but not searchable
+
+Strength decays exponentially based on type (working decays fastest, procedural slowest).
+Access-based reinforcement: each recall bumps importance by 0.02 (capped at 1.0).
+The `reflect_and_consolidate` tool automates promotion, decay queuing, and duplicate detection.
+
 ### MCP Tools
 
 | Tool | Purpose |
@@ -58,6 +95,27 @@ Four types:
 | `forget_memory` | Soft-delete (archive) a memory |
 | `get_memory_status` | Connection status and memory counts |
 | `promote_memory` | Move memory to higher scope |
+| `update_memory` | Update content, tags, importance, or metadata |
+| `tag_memory` | Add tags to a memory (additive, no replacement) |
+| `search_knowledge_graph` | Entity search + relationship traversal (1-3 hops) |
+| `reflect_and_consolidate` | Consolidation pipeline: promote, decay, deduplicate |
+
+### SurrealDB Schema
+
+Schema is defined in `mcp/src/schema.ts` and executed by `surrealdb-client.ts` `initSchema()`:
+
+| Table | Type | Purpose |
+|-------|------|---------|
+| `memory` | SCHEMAFULL | Main memory records (BM25 + HNSW indexed) |
+| `entity` | SCHEMAFULL | Knowledge graph nodes (HNSW indexed) |
+| `relates_to` | RELATION | Knowledge graph edges (entity -> entity) |
+| `consolidation_queue` | SCHEMAFULL | Pending consolidation work items |
+| `retrieval_log` | SCHEMAFULL | Search access tracking for feedback |
+| `evolution_state` | SCHEMAFULL | System-wide tuning parameters |
+| `memory_analyzer` | ANALYZER | BM25 tokenizer (blank + class, snowball English) |
+
+Events: `memory_lifecycle` logs status transitions to retrieval_log; `memory_decay_check` auto-queues stale memories for consolidation.
+Computed field: `memory_strength` — exponential decay weighted by memory_type (procedural slowest, working fastest).
 
 ## Development
 
@@ -92,7 +150,7 @@ cd mcp && bun run typecheck
 
 ## Implementation Phases
 
-### Phase 1: MVP (Current)
+### Phase 1: MVP
 - [x] Plugin scaffold (manifest, directories)
 - [x] MCP server skeleton (Bun + TS)
 - [x] SurrealDB client with embedded SurrealKV
@@ -101,41 +159,61 @@ cd mcp && bun run typecheck
 - [x] Commands: /remember, /recall, /forget, /memory-status
 - [x] Stop hook for session-end consolidation
 - [ ] Install dependencies and verify MCP server starts
-- [ ] Test end-to-end: store → recall → forget cycle
+- [ ] Test end-to-end: store -> recall -> forget cycle
 - [ ] Verify plugin loads in Claude Code
 
-### Phase 2: Vector Search + Knowledge Graph
-- [ ] Add HNSW vector index on memory embeddings
+### Phase 2: Knowledge Graph + Extended Tools
+- [x] Schema extracted to `mcp/src/schema.ts` with all table definitions
+- [x] HNSW vector indexes defined on memory and entity tables
+- [x] Entity and relationship tables (entity + relates_to)
+- [x] search_knowledge_graph MCP tool
+- [x] update_memory and tag_memory MCP tools
+- [x] reflect_and_consolidate MCP tool
+- [x] Consolidation queue, retrieval log, evolution state tables
+- [x] Memory lifecycle events (decay check)
+- [x] Per-project config via `.claude/surrealdb-memory.local.md`
+- [x] Memory mode (`mem://`) for testing
+- [x] PostToolUse hooks (file changes, bash errors)
+- [x] /memory-setup wizard command
+- [x] memory-admin skill
 - [ ] Local embedding generation (@xenova/transformers, all-MiniLM-L6-v2)
 - [ ] Hybrid search (BM25 + HNSW via search::rrf)
-- [ ] Entity extraction and knowledge graph (entity + relates_to tables)
-- [ ] search_knowledge_graph MCP tool
 - [ ] SessionStart hook: load project memories into context
 
 ### Phase 3: Self-Evolution
-- [ ] Memory lifecycle state machine (active → consolidated → archived → forgotten)
-- [ ] Exponential decay with access-based strengthening
-- [ ] Consolidation pipeline (episodic → semantic summarization)
+- [x] Memory lifecycle state machine (active -> consolidated -> archived -> forgotten)
+- [x] Computed memory_strength with exponential decay
+- [x] Access-based reinforcement (importance bump on recall)
+- [ ] Full consolidation pipeline (episodic -> semantic summarization)
 - [ ] Retrieval feedback tracking and strategy adaptation
 - [ ] memory-consolidator agent (full implementation)
 
 ### Phase 4: Multi-Deployment + Polish
-- [ ] Local server mode (surreal start rocksdb://)
+- [x] Memory mode (`mem://`)
+- [x] Per-project config file support
+- [x] /memory-setup wizard command
 - [ ] Docker mode with auto-management
-- [ ] Remote/cloud connection
-- [ ] /memory-setup wizard command
 - [ ] Data migration between modes
 - [ ] Fallback strategy (write queue during outages)
 
 ## Architecture Research
 
-Extensive architecture documentation is in the Obsidian vault:
+### In-Repo Documentation (docs/)
+
+```
+docs/
+├── research/          ← 22 research docs (SurrealDB, memory theory, plugin design)
+├── architecture/      ← 5 design docs (overview, memory-model, knowledge-graph, hooks, deployment)
+└── guides/            ← 5 user guides (getting-started, configuration, deployment-modes, developing, best-practices)
+```
+
+### Obsidian Vault (external reference)
 
 ```
 ADMINISTRIVIA/Research Rabbitholes/
-├── SurrealDB 3.0/                    ← 10 docs on SurrealDB features
-├── SurrealDB Agentic Memory/         ← 10 docs on memory theory + SurrealDB mapping
-└── SurrealDB Memory Plugin/          ← 9 docs on plugin architecture
+├── SurrealDB 3.0/                    <- 10 docs on SurrealDB features
+├── SurrealDB Agentic Memory/         <- 10 docs on memory theory + SurrealDB mapping
+└── SurrealDB Memory Plugin/          <- 9 docs on plugin architecture
 ```
 
 Key architecture docs:
@@ -146,24 +224,16 @@ Key architecture docs:
 - **Self-Evolving Memory Design** — lifecycle, decay, consolidation
 - **Multi-Deployment Architecture** — deployment modes and setup wizard
 
-## SurrealDB Schema
-
-The core schema is defined in `mcp/src/surrealdb-client.ts` `initSchema()`:
-
-- `memory` — main memory table (SCHEMAFULL, BM25 indexed)
-- `entity` — knowledge graph nodes
-- `relates_to` — knowledge graph edges (TYPE RELATION)
-- `memory_analyzer` — BM25 tokenizer for full-text search
-
 ## Conventions
 
 - TypeScript strict mode, ESNext target
 - Bun as runtime and package manager
 - All MCP tools return `{ content: [{ type: "text", text: ... }] }` format
 - Errors return `isError: true` with descriptive message
-- Hook scripts use `set -uo pipefail` and exit 0 on non-critical failures
+- Hook scripts source `config.sh` for shared env, use `set -uo pipefail`, exit 0 on non-critical failures
 - Commands are markdown files with YAML frontmatter
 - Skills follow progressive disclosure (SKILL.md lean, details in references/)
+- Schema DDL lives in `mcp/src/schema.ts`, not inline in client code
 
 ## Git
 

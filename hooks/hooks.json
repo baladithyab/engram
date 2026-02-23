@@ -19,6 +19,33 @@
       "type": "PreCompact",
       "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact.sh",
       "timeout": 15000
+    },
+    {
+      "type": "PostToolUse",
+      "matcher": {
+        "toolName": "Write|Edit"
+      },
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-file-change.sh \"$TOOL_NAME\" \"$TOOL_INPUT\"",
+          "timeout": 5000
+        }
+      ]
+    },
+    {
+      "type": "PostToolUse",
+      "matcher": {
+        "toolName": "Bash",
+        "exitCode": "!0"
+      },
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-bash-error.sh \"$TOOL_INPUT\" \"$TOOL_OUTPUT\"",
+          "timeout": 5000
+        }
+      ]
     }
   ]
 }
