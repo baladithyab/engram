@@ -1,298 +1,173 @@
 # surrealdb-memory — Claude Code Memory Plugin
 
-A Claude Code plugin that provides persistent, hierarchical, self-evolving memory
-powered by SurrealDB. Single database replaces the typical Postgres+Neo4j+Qdrant+Redis
-stack used by other memory systems.
+Persistent, hierarchical, self-evolving memory for Claude Code powered by SurrealDB.
+Single database replaces the typical Postgres+Neo4j+Qdrant+Redis stack.
+
+## Quick Reference
+
+```bash
+cd mcp && bun install          # install deps
+cd mcp && bun run dev          # run MCP server locally
+cd mcp && bun run typecheck    # type check
+claude --plugin-dir .          # test plugin in Claude Code
+```
 
 ## Architecture
+
+@docs/architecture/overview.md
+@docs/architecture/memevolve-integration.md
 
 ### Plugin Structure
 
 ```
 surrealdb-memory/
 ├── .claude-plugin/plugin.json    ← Plugin manifest
-├── .mcp.json                     ← MCP server config
-├── commands/                     ← Slash commands (/remember, /recall, /forget, /memory-status, /memory-setup)
-├── skills/                       ← Skills (memory-query, memory-admin)
-├── agents/                       ← Agents (memory-consolidator)
-├── hooks/                        ← Hooks (Setup, SessionStart, Stop, PreCompact, PostToolUse, SubagentStart, TaskCompleted, TeammateIdle, PermissionRequest)
+├── .mcp.json                     ← MCP server config (embedded SurrealKV default)
+├── commands/                     ← /remember, /recall, /forget, /memory-status, /memory-setup, /memory-config
+├── skills/                       ← memory-query, memory-admin
+├── agents/                       ← memory-consolidator (context: fork, memory: project)
+├── hooks/                        ← 10 hook events (Setup through PermissionRequest)
 │   ├── hooks.json
-│   └── scripts/
-│       ├── config.sh             ← Shared env config for hook scripts
-│       ├── session-start.sh      ← Load project memories on session start
-│       ├── pre-compact.sh        ← Preserve context before compaction
-│       ├── post-file-change.sh   ← Log file changes (Write/Edit)
-│       └── post-bash-error.sh    ← Log bash errors for memory
-├── docs/                         ← Documentation (32 docs total)
-│   ├── research/                 ← 22 research docs (SurrealDB features, memory theory, plugin design)
-│   ├── architecture/             ← 5 design docs (overview, memory model, knowledge graph, hooks, deployment)
-│   └── guides/                   ← 5 user guides (getting started, configuration, deployment, dev, best practices)
-└── mcp/                          ← MCP server (Bun + TypeScript)
-    ├── package.json
-    ├── tsconfig.json
-    └── src/
-        ├── index.ts              ← Server entry point
-        ├── schema.ts             ← SurrealQL schema definitions (all tables, indexes, events)
-        ├── surrealdb-client.ts   ← SurrealDB connection wrapper + config reader
-        ├── tools.ts              ← MCP tool definitions
-        └── resources.ts          ← MCP resource definitions
+│   └── scripts/                  ← config.sh, session-start.sh, pre-compact.sh, post-*.sh, setup.sh, auto-approve-memory.sh
+├── docs/                         ← 33 docs (22 research + 6 architecture + 5 guides)
+└── mcp/src/                      ← Bun + TypeScript MCP server
+    ├── index.ts                  ← Entry point (scope ID generation, graceful shutdown)
+    ├── schema.ts                 ← All SurrealQL DDL (6 tables, indexes, events)
+    ├── surrealdb-client.ts       ← Connection wrapper, scope isolation, config reader
+    ├── tools.ts                  ← 9 MCP tools
+    └── resources.ts              ← memory://status resource
 ```
 
-### Key Design Decisions
+### Key Decisions
 
-- **Runtime:** Bun + TypeScript for the MCP server
-- **Database:** SurrealDB 3.0 via `surrealdb` npm package
-- **Default mode:** Embedded SurrealKV (`surrealkv://` path) — zero config, persistent
-- **Schema:** All SurrealQL DDL lives in `mcp/src/schema.ts` as exported constants
-- **Search:** BM25 full-text search + HNSW vector indexes defined (embeddings deferred)
-- **Embeddings:** Phase 2 (local all-MiniLM-L6-v2 via @xenova/transformers)
-- **Config:** Per-project overrides via `.claude/surrealdb-memory.local.md` YAML frontmatter
+- **Runtime:** Bun + TypeScript
+- **Database:** SurrealDB 3.0 embedded via `@surrealdb/node` (SurrealKV backend)
+- **Search:** BM25 full-text + HNSW vector indexes (embeddings generation in Phase 2)
+- **Config:** `.claude/surrealdb-memory.local.md` YAML frontmatter, overridable by `.env` or env vars
+- **No co-author lines, bylines, or attribution in commits.** Ever.
 
-### Deployment Modes
+## Memory Model — Hierarchical Scoping
 
-| Mode | Endpoint | Persistence | Use Case |
-|------|----------|-------------|----------|
-| `embedded` | `surrealkv://{data_path}` | Persistent file-based | Default, single machine |
-| `memory` | `mem://` | Ephemeral (snapshot on close) | Testing, CI |
-| `local` | `ws://localhost:8000` | Server-managed | Shared dev, RocksDB backend |
-| `remote` | `wss://...` | Cloud-managed | Team use, production |
+@docs/architecture/memory-model.md
 
-Mode is set via `SURREAL_MODE` env var, `.mcp.json`, or `.claude/surrealdb-memory.local.md`.
-Use `/memory-setup` to configure interactively.
+Each scope maps to its own SurrealDB database within namespace `memory`:
 
-### Memory Model — Hierarchical Scoping
+| Scope | Database ID | Persists | Retrieval Weight |
+|-------|------------|----------|-----------------|
+| **Session** | `s_{CLAUDE_SESSION_ID}` | Current conversation | 1.5x (highest) |
+| **Project** | `p_{sha256(project_path)[:12]}` | Across sessions | 1.0x |
+| **User** | `u_{sha256(HOME)[:12]}` | Across all projects | 0.7x |
 
-Each scope maps to its own SurrealDB database within the `memory` namespace:
+Promotion: session → project (importance ≥ 0.5, access ≥ 2) → user (accessed in 3+ sessions).
 
-| Scope | Database ID | Persists | Content |
-|-------|------------|----------|---------|
-| **User** | `u_{sha256(HOME)[:12]}` | Across all projects | Preferences, cross-project patterns, tool expertise |
-| **Project** | `p_{sha256(project_path)[:12]}` | Across sessions in one project | Architecture, conventions, decisions, error patterns |
-| **Session** | `s_{CLAUDE_SESSION_ID}` | Current conversation only | Working memory, scratchpad, task context |
+Four types with different decay half-lives:
 
-Promotion flow: **session → project → user** (based on importance and access frequency).
-Retrieval searches all scopes with weighted priority: session ×1.5, project ×1.0, user ×0.7.
-
-Four memory types, each with different decay rates:
-
-| Type | Half-Life | Use For |
+| Type | Half-Life | Examples |
 |------|-----------|---------|
-| **Working** | 1 hour | Current task context, scratchpad |
-| **Episodic** | 1 day | Events, conversations, error resolutions |
-| **Semantic** | 7 days | Facts, architecture decisions, conventions |
-| **Procedural** | 30 days | Skills, patterns, how-to knowledge |
+| working | 1 hour | Task context, scratchpad |
+| episodic | 1 day | Bug fixes, error resolutions |
+| semantic | 7 days | Architecture decisions, conventions |
+| procedural | 30 days | Patterns, how-tos, tool expertise |
 
-### Memory Lifecycle (MemEvolve EURM)
+## Hook Pipeline (MemEvolve EURM)
 
-The hook pipeline implements MemEvolve's EURM framework:
+@docs/architecture/hooks-and-lifecycle.md
 
-| EURM Module | Plugin Implementation |
-|-------------|---------------------|
-| **Encode** | Stop hook, PostToolUse hooks, PreCompact hook, TaskCompleted hook |
-| **Update/Store** | `store_memory` routes to correct scope database |
-| **Retrieve** | SessionStart context injection, `recall_memories` cross-scope search |
-| **Manage** | `reflect_and_consolidate`, TeammateIdle hook, computed decay |
+| Hook | EURM | What It Does |
+|------|------|-------------|
+| Setup | — | Auto-detect environment, create config, init DB |
+| SessionStart | **R**etrieve | Inject memory context into system prompt |
+| PostToolUse (Write/Edit) | **E**ncode | Log file changes |
+| PostToolUse (Bash error) | **E**ncode | Log errors for debugging memory |
+| SubagentStart | **R**etrieve | Brief subagents with project memory |
+| TaskCompleted | **E**ncode | Capture subagent discoveries |
+| PreCompact | **E**ncode | Save critical context before compaction |
+| Stop | **E**+**U**+**M** | Store learnings, strengthen accessed, consolidate |
+| TeammateIdle | **M**anage | Assign memory maintenance |
+| PermissionRequest | — | Auto-approve memory MCP tools |
 
-Lifecycle states: `active` → `consolidated` → `archived` → `forgotten`
-- Each recall **strengthens** the memory (extends effective half-life by 20%)
-- Stop hook runs ENCODE + MANAGE (store learnings, then consolidate)
-- PreCompact hook runs ENCODE (save context before compaction)
-- SessionStart hook runs RETRIEVE (prime context from all scopes)
-
-See [docs/architecture/memevolve-integration.md](docs/architecture/memevolve-integration.md) for the complete EURM mapping.
-
-### MCP Tools
+## MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `store_memory` | Create a memory with content, type, scope, tags, importance |
-| `recall_memories` | BM25 full-text search across memories |
-| `forget_memory` | Soft-delete (archive) a memory |
-| `get_memory_status` | Connection status and memory counts |
+| `store_memory` | Create memory (routes to scope database) |
+| `recall_memories` | Cross-scope BM25 search with weighted merge |
+| `search_knowledge_graph` | Entity search + graph traversal (1-3 hops) |
+| `reflect_and_consolidate` | Promote, archive, deduplicate |
 | `promote_memory` | Move memory to higher scope |
-| `update_memory` | Update content, tags, importance, or metadata |
-| `tag_memory` | Add tags to a memory (additive, no replacement) |
-| `search_knowledge_graph` | Entity search + relationship traversal (1-3 hops) |
-| `reflect_and_consolidate` | Consolidation pipeline: promote, decay, deduplicate |
+| `update_memory` | Update content/tags/importance |
+| `tag_memory` | Add tags (additive) |
+| `forget_memory` | Soft-delete |
+| `get_memory_status` | Per-scope counts and connection info |
 
-## Plugin Feature Coverage
+## SurrealDB Schema
 
-### Hook Events Used
-| Event | Type | Purpose |
-|-------|------|---------|
-| Setup | command | Initialize memory database and default config on first run |
-| SessionStart | command | Load project/user memories into context |
-| Stop | prompt | Consolidate session learnings, promote memories |
-| PreCompact | command | Save context before compaction |
-| PostToolUse (Write/Edit) | command | Log file changes to memory |
-| PostToolUse (Bash error) | command | Log errors for debugging memory |
-| SubagentStart | prompt | Brief subagents with relevant memory context |
-| TaskCompleted | prompt | Capture subagent discoveries into memory |
-| TeammateIdle | prompt | Assign memory maintenance to idle agents |
-| PermissionRequest | command | Auto-approve memory MCP tool permissions |
+@docs/architecture/knowledge-graph.md
 
-### Agent Features Used
-| Feature | Value | Purpose |
-|---------|-------|---------|
-| memory | project | Persistent project-scoped memory for consolidator |
-| hooks | Stop | Agent-scoped cleanup hook |
-| context | fork | Isolated execution context |
-| tools | restricted | Least-privilege tool access |
+Schema defined in `mcp/src/schema.ts`:
 
-### Command Features Used
-| Feature | Purpose |
-|---------|---------|
-| allowed-tools | Restrict each command to relevant MCP tools only |
-| argument-hint | Show argument hints in command palette |
+| Table | Purpose |
+|-------|---------|
+| `memory` | Main records (BM25 + HNSW indexed) |
+| `entity` | Knowledge graph nodes (HNSW indexed) |
+| `relates_to` | Graph edges (TYPE RELATION entity→entity) |
+| `consolidation_queue` | Pending consolidation work |
+| `retrieval_log` | Search tracking for feedback |
+| `evolution_state` | System tuning parameters |
 
-### Skill Features Used
-| Feature | Purpose |
-|---------|---------|
-| Third-person descriptions | Maximize semantic trigger matching |
-| Specific trigger phrases | Surface skills on exact user queries |
-| Progressive disclosure | Metadata always loaded, body on trigger, references on demand |
-| version field | Track skill evolution |
+## Deployment Modes
 
-### SurrealDB Schema
+@docs/architecture/deployment-modes.md
 
-Schema is defined in `mcp/src/schema.ts` and executed by `surrealdb-client.ts` `initSchema()`:
+| Mode | Endpoint | Default |
+|------|----------|---------|
+| `embedded` | `surrealkv://{data_path}` | Yes |
+| `memory` | `mem://` | No (testing) |
+| `local` | `ws://localhost:8000` | No |
+| `remote` | `wss://...` | No |
 
-| Table | Type | Purpose |
-|-------|------|---------|
-| `memory` | SCHEMAFULL | Main memory records (BM25 + HNSW indexed) |
-| `entity` | SCHEMAFULL | Knowledge graph nodes (HNSW indexed) |
-| `relates_to` | RELATION | Knowledge graph edges (entity -> entity) |
-| `consolidation_queue` | SCHEMAFULL | Pending consolidation work items |
-| `retrieval_log` | SCHEMAFULL | Search access tracking for feedback |
-| `evolution_state` | SCHEMAFULL | System-wide tuning parameters |
-| `memory_analyzer` | ANALYZER | BM25 tokenizer (blank + class, snowball English) |
+Config resolution: `env vars` > `.claude/surrealdb-memory.local.md` > `.mcp.json env` > defaults.
 
-Events: `memory_lifecycle` logs status transitions to retrieval_log; `memory_decay_check` auto-queues stale memories for consolidation.
-Computed field: `memory_strength` — exponential decay weighted by memory_type (procedural slowest, working fastest).
+## Implementation Status
 
-## Development
+@docs/guides/developing.md
 
-### Prerequisites
+### Done
+- Plugin scaffold, MCP server, 9 tools, 10 hooks, 6 commands, 2 skills, 1 agent
+- Hierarchical scope isolation (3 SurrealDB databases per session)
+- MemEvolve EURM pipeline across all hooks
+- Exponential decay with type-specific half-lives and access strengthening
+- Knowledge graph schema (entity + relates_to)
+- Multi-deployment mode support (embedded, memory, local, remote)
+- Auto-config Setup hook + interactive /memory-setup wizard
+- PermissionRequest auto-approval for all memory tools
 
-- Bun 1.3+ (`brew install bun` or `curl -fsSL https://bun.sh/install | bash`)
-- SurrealDB is NOT needed separately — embedded mode bundles it
-
-### Setup
-
-```bash
-cd mcp && bun install
-```
-
-### Run MCP server locally (for testing)
-
-```bash
-cd mcp && bun run dev
-```
-
-### Test the plugin in Claude Code
-
-```bash
-claude --plugin-dir /Users/baladita/Documents/DevBox/surrealdb-memory
-```
-
-### Type checking
-
-```bash
-cd mcp && bun run typecheck
-```
-
-## Implementation Phases
-
-### Phase 1: MVP
-- [x] Plugin scaffold (manifest, directories)
-- [x] MCP server skeleton (Bun + TS)
-- [x] SurrealDB client with embedded SurrealKV
-- [x] Core tools: store_memory, recall_memories, forget_memory, get_memory_status, promote_memory
-- [x] BM25 full-text search on memory content
-- [x] Commands: /remember, /recall, /forget, /memory-status
-- [x] Stop hook for session-end consolidation
-- [ ] Install dependencies and verify MCP server starts
-- [ ] Test end-to-end: store -> recall -> forget cycle
-- [ ] Verify plugin loads in Claude Code
-
-### Phase 2: Knowledge Graph + Extended Tools
-- [x] Schema extracted to `mcp/src/schema.ts` with all table definitions
-- [x] HNSW vector indexes defined on memory and entity tables
-- [x] Entity and relationship tables (entity + relates_to)
-- [x] search_knowledge_graph MCP tool
-- [x] update_memory and tag_memory MCP tools
-- [x] reflect_and_consolidate MCP tool
-- [x] Consolidation queue, retrieval log, evolution state tables
-- [x] Memory lifecycle events (decay check)
-- [x] Per-project config via `.claude/surrealdb-memory.local.md`
-- [x] Memory mode (`mem://`) for testing
-- [x] PostToolUse hooks (file changes, bash errors)
-- [x] /memory-setup wizard command
-- [x] memory-admin skill
-- [x] SubagentStart hook for memory briefing
+### Remaining
 - [ ] Local embedding generation (@xenova/transformers, all-MiniLM-L6-v2)
 - [ ] Hybrid search (BM25 + HNSW via search::rrf)
-- [ ] SessionStart hook: load project memories into context
-
-### Phase 3: Self-Evolution
-- [x] Memory lifecycle state machine (active -> consolidated -> archived -> forgotten)
-- [x] Computed memory_strength with exponential decay
-- [x] Access-based reinforcement (importance bump on recall)
-- [x] TeammateIdle hook for maintenance
-- [x] TaskCompleted hook for capture
-- [ ] Full consolidation pipeline (episodic -> semantic summarization)
+- [ ] Full consolidation pipeline (episodic → semantic summarization)
 - [ ] Retrieval feedback tracking and strategy adaptation
-- [ ] memory-consolidator agent (full implementation)
-
-### Phase 4: Multi-Deployment + Polish
-- [x] Memory mode (`mem://`)
-- [x] Per-project config file support
-- [x] /memory-setup wizard command
 - [ ] Docker mode with auto-management
 - [ ] Data migration between modes
-- [ ] Fallback strategy (write queue during outages)
-
-## Architecture Research
-
-### In-Repo Documentation (docs/)
-
-```
-docs/
-├── research/          ← 22 research docs (SurrealDB, memory theory, plugin design)
-├── architecture/      ← 5 design docs (overview, memory-model, knowledge-graph, hooks, deployment)
-└── guides/            ← 5 user guides (getting-started, configuration, deployment-modes, developing, best-practices)
-```
-
-### Obsidian Vault (external reference)
-
-```
-ADMINISTRIVIA/Research Rabbitholes/
-├── SurrealDB 3.0/                    <- 10 docs on SurrealDB features
-├── SurrealDB Agentic Memory/         <- 10 docs on memory theory + SurrealDB mapping
-└── SurrealDB Memory Plugin/          <- 9 docs on plugin architecture
-```
-
-Key architecture docs:
-- **Plugin Structure and Components** — full component design
-- **Hierarchical Memory Model Design** — session/project/user scopes
-- **Hooks System for Automatic Memory** — all hook event types
-- **MCP Server Design** — tool schemas and server architecture
-- **Self-Evolving Memory Design** — lifecycle, decay, consolidation
-- **Multi-Deployment Architecture** — deployment modes and setup wizard
+- [ ] Fallback write queue during outages
+- [ ] End-to-end integration testing
 
 ## Conventions
 
-- TypeScript strict mode, ESNext target
-- Bun as runtime and package manager
-- All MCP tools return `{ content: [{ type: "text", text: ... }] }` format
-- Errors return `isError: true` with descriptive message
-- Hook scripts source `config.sh` for shared env, use `set -uo pipefail`, exit 0 on non-critical failures
-- Commands are markdown files with YAML frontmatter
-- Skills follow progressive disclosure (SKILL.md lean, details in references/)
+- TypeScript strict mode, ESNext target, Bun runtime
+- MCP tools return `{ content: [{ type: "text", text: ... }] }`, errors set `isError: true`
+- Hook scripts source `config.sh`, use `set -uo pipefail`, exit 0 on non-critical failures
 - Schema DDL lives in `mcp/src/schema.ts`, not inline in client code
+- Commands/skills are markdown with YAML frontmatter, skills use third-person descriptions
+- **No co-author lines, bylines, or attribution in commits.** Just the message.
 
-## Git
+## Documentation
 
-- **No co-author lines, bylines, or attribution in commits.** Never add `Co-Authored-By`,
-  `Signed-off-by`, or any other trailer/attribution to commit messages. Just the commit
-  message itself, nothing else.
+```
+docs/
+├── research/       22 docs — SurrealDB 3.0, agentic memory, MemEvolve, Graphiti, LightRAG
+├── architecture/   6 docs — overview, memory model, MemEvolve, hooks, knowledge graph, deployment
+└── guides/         5 docs — getting started, configuration, deployment, developing, best practices
+```
+
+For deep dives, read the @-imported docs above or browse `docs/` directly.
