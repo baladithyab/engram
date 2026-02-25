@@ -404,6 +404,17 @@ export function registerMemoryTools(server: McpServer, db: SurrealDBClient): voi
               report.actionsPerformed.push(`Queued ${mem.id} for consolidation (decay)`);
             }
           }
+
+          // Archive stale candidates directly
+          for (const mem of report.staleCandidates as any[]) {
+            if (mem?.id) {
+              await db.query(
+                `UPDATE $id SET status = 'archived', status_changed_at = time::now(), updated_at = time::now()`,
+                { id: mem.id }
+              );
+              report.actionsPerformed.push(`Archived ${mem.id} (low strength, low access)`);
+            }
+          }
         }
 
         return {
