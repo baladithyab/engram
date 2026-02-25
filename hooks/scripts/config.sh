@@ -1,6 +1,6 @@
 #!/bin/bash
-# Shared environment config for surrealdb-memory hook scripts.
-# Reads .claude/surrealdb-memory.local.md YAML frontmatter for per-project overrides.
+# Shared environment config for engram hook scripts.
+# Reads .claude/engram.local.md YAML frontmatter (falls back to surrealdb-memory.local.md).
 # Source this from other hook scripts: source "$(dirname "$0")/config.sh"
 
 set -uo pipefail
@@ -11,15 +11,17 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." &
 # SurrealDB connection defaults
 export SURREAL_MODE="${SURREAL_MODE:-embedded}"
 export SURREAL_URL="${SURREAL_URL:-}"
-export SURREAL_DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/surrealdb-memory/data}"
+export SURREAL_DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/engram/data}"
 export SURREAL_USER="${SURREAL_USER:-root}"
 export SURREAL_PASS="${SURREAL_PASS:-root}"
 export SURREAL_NS="${SURREAL_NS:-memory}"
 export SURREAL_DB="${SURREAL_DB:-default}"
 
-# Read per-project config from .claude/surrealdb-memory.local.md YAML frontmatter
+# Read per-project config from .claude/engram.local.md YAML frontmatter (with legacy fallback)
 _CONFIG_SEARCH_PATHS=(
+  "${CLAUDE_PROJECT_ROOT:-.}/.claude/engram.local.md"
   "${CLAUDE_PROJECT_ROOT:-.}/.claude/surrealdb-memory.local.md"
+  "${PWD}/.claude/engram.local.md"
   "${PWD}/.claude/surrealdb-memory.local.md"
 )
 

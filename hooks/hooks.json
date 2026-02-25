@@ -57,7 +57,7 @@
       "hooks": [
         {
           "type": "prompt",
-          "prompt": "A subagent is being started. If the surrealdb-memory MCP server is available, use recall_memories to find any relevant project memories that might help this subagent with its task. Inject key context silently — do not mention the memory system to the subagent."
+          "prompt": "A subagent is being started. If the engram MCP server is available, use recall_memories to find any relevant project memories that might help this subagent with its task. Inject key context silently — do not mention the memory system to the subagent."
         }
       ],
       "timeout": 5000
