@@ -6,8 +6,8 @@ import { registerMemoryTools } from "./tools.js";
 import { registerMemoryResources } from "./resources.js";
 
 const server = new McpServer({
-  name: "surrealdb-memory",
-  version: "0.1.0",
+  name: "engram",
+  version: "0.2.0",
 });
 
 // Generate scope identifiers for hierarchical memory isolation
@@ -19,7 +19,7 @@ const fileConfig = readConfig();
 const db = new SurrealDBClient(
   {
     mode: (process.env.SURREAL_MODE as DeploymentMode) ?? fileConfig.mode ?? "embedded",
-    dataPath: process.env.SURREAL_DATA_PATH ?? fileConfig.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`,
+    dataPath: process.env.SURREAL_DATA_PATH ?? fileConfig.dataPath ?? `${process.env.HOME}/.claude/engram/data`,
     url: process.env.SURREAL_URL ?? fileConfig.url,
     username: process.env.SURREAL_USER ?? fileConfig.username ?? "root",
     password: process.env.SURREAL_PASS ?? fileConfig.password ?? "root",
@@ -51,6 +51,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Fatal error starting surrealdb-memory MCP server:", err);
+  console.error("Fatal error starting engram MCP server:", err);
   process.exit(1);
 });
