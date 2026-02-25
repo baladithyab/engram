@@ -1,6 +1,6 @@
 # Memory Model
 
-> Detailed specification of the surrealdb-memory hierarchical memory system:
+> Detailed specification of the engram hierarchical memory system:
 > scopes, types, lifecycle states, promotion pipeline, scoring, decay, and
 > the complete SurrealQL schema.
 >
@@ -44,7 +44,7 @@ build/test/deploy recipes, dependency information, past decisions and rationale,
 common errors and their fixes, team conventions.
 
 **Storage:** Persistent on disk via SurrealKV or RocksDB. Data stored in
-`.claude/surrealdb-memory/` within the project root (recommended `.gitignore` entry
+`.claude/engram/` within the project root (recommended `.gitignore` entry
 since memory is personal, not shared via git).
 
 **SurrealDB mapping:**
@@ -65,7 +65,7 @@ since memory is personal, not shared via git).
 **Content:** Personal coding preferences, tool expertise, framework knowledge,
 cross-project patterns, environment knowledge, general workflow intelligence.
 
-**Storage:** Persistent at `~/.claude/surrealdb-memory/`. Survives across all projects.
+**Storage:** Persistent at `~/.claude/engram/`. Survives across all projects.
 
 **SurrealDB mapping:**
 - Namespace: `user`

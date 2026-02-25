@@ -77,7 +77,7 @@ beginning of a session, so it starts with knowledge accumulated from past sessio
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/surrealdb-memory/data}"
+DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/engram/data}"
 
 # Skip if no database exists yet
 if [ ! -d "$DATA_PATH" ]; then
@@ -295,7 +295,7 @@ breaking the "invisible by default" principle.
 **How it works:**
 
 1. Claude Code fires `PermissionRequest` when an MCP tool call needs user approval.
-2. The command script checks if the requested tool belongs to the surrealdb-memory
+2. The command script checks if the requested tool belongs to the engram
    MCP server.
 3. If it does, the script exits 0 (approve). Otherwise it exits 1 (defer to user).
 

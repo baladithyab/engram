@@ -1,6 +1,6 @@
 # Getting Started
 
-Quick start guide for the surrealdb-memory Claude Code plugin.
+Quick start guide for the engram Claude Code plugin.
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@ bundles the database engine directly via the `surrealdb` npm package.
 Clone or copy the plugin, then install MCP server dependencies:
 
 ```bash
-git clone <repo-url> surrealdb-memory
-cd surrealdb-memory/mcp
+git clone <repo-url> engram
+cd engram/mcp
 bun install
 ```
 
@@ -27,11 +27,11 @@ That's it. No database setup, no Docker, no config files.
 Point Claude Code at the plugin directory:
 
 ```bash
-claude --plugin-dir /path/to/surrealdb-memory
+claude --plugin-dir /path/to/engram
 ```
 
 On first launch, the MCP server starts an embedded SurrealKV database at
-`~/.claude/surrealdb-memory/data`. This persists across sessions automatically.
+`~/.claude/engram/data`. This persists across sessions automatically.
 
 ## Verify it Works
 
@@ -123,7 +123,7 @@ Out of the box, the plugin uses:
 | Setting | Default |
 |---------|---------|
 | Mode | Embedded SurrealKV |
-| Data path | `~/.claude/surrealdb-memory/data` |
+| Data path | `~/.claude/engram/data` |
 | Username | `root` |
 | Password | `root` |
 | Namespace | `memory` |

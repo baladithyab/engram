@@ -1,6 +1,6 @@
 # Engram Evolution Design
 
-> Rename surrealdb-memory to Engram and implement Phases 1-5: EURM gap closure,
+> Rename engram to Engram and implement Phases 1-5: EURM gap closure,
 > embedding pipeline, Code Mode interface, recursive memory processing, and
 > MemEvolve meta-evolution.
 >
@@ -10,7 +10,7 @@
 
 ---
 
-## 1. Rename: surrealdb-memory → Engram
+## 1. Rename: engram → Engram
 
 An engram is the physical trace of a memory in the brain — the substrate that stores
 learned experience. The name is short, memorable, and precisely describes what the
@@ -20,13 +20,13 @@ plugin does: it is the physical substrate of Claude's persistent memory.
 
 | Component | Old | New |
 |-----------|-----|-----|
-| Plugin name (plugin.json) | `surrealdb-memory` | `engram` |
-| MCP server name (.mcp.json) | `surrealdb-memory` | `engram` |
-| Config file | `.claude/surrealdb-memory.local.md` | `.claude/engram.local.md` |
-| Default data path | `~/.claude/surrealdb-memory/data` | `~/.claude/engram/data` |
-| Package name (package.json) | `surrealdb-memory-mcp` | `engram-mcp` |
-| Hook scripts | References to `surrealdb-memory` | References to `engram` |
-| Documentation | All `surrealdb-memory` references | All `engram` references |
+| Plugin name (plugin.json) | `engram` | `engram` |
+| MCP server name (.mcp.json) | `engram` | `engram` |
+| Config file | `.claude/engram.local.md` | `.claude/engram.local.md` |
+| Default data path | `~/.claude/engram/data` | `~/.claude/engram/data` |
+| Package name (package.json) | `engram-mcp` | `engram-mcp` |
+| Hook scripts | References to `engram` | References to `engram` |
+| Documentation | All `engram` references | All `engram` references |
 
 ### What Does NOT Change
 
@@ -36,8 +36,8 @@ plugin does: it is the physical substrate of Claude's persistent memory.
 
 ### Migration
 
-The Setup hook detects old data paths (`~/.claude/surrealdb-memory/`) and reads them
-as fallback. The config reader checks both `.claude/surrealdb-memory.local.md` and
+The Setup hook detects old data paths (`~/.claude/engram/`) and reads them
+as fallback. The config reader checks both `.claude/engram.local.md` and
 `.claude/engram.local.md`, preferring the new name. No data migration needed — the
 SurrealDB files are path-agnostic.
 

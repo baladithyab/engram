@@ -1,12 +1,12 @@
 # Plugin Structure and Components
 
-> Design document for the `surrealdb-memory` Claude Code plugin — directory layout,
+> Design document for the `engram` Claude Code plugin — directory layout,
 > manifest, commands, skills, agents, hooks, MCP server, and configuration discovery.
 
 ## Directory Structure
 
 ```
-surrealdb-memory/
+engram/
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest
 ├── .mcp.json                    # MCP server definition
@@ -67,7 +67,7 @@ surrealdb-memory/
 
 ```json
 {
-  "name": "surrealdb-memory",
+  "name": "engram",
   "version": "0.1.0",
   "description": "Hierarchical, self-evolving memory for Claude Code sessions backed by SurrealDB",
   "author": {
@@ -97,7 +97,7 @@ surrealdb-memory/
 
 ```json
 {
-  "surrealdb-memory": {
+  "engram": {
     "command": "node",
     "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.js"],
     "env": {
@@ -126,8 +126,8 @@ The MCP server exposes the core memory operations as tools and the memory hierar
 description: Store a memory — insight, decision, pattern, or fact — into the knowledge graph
 argument-hint: [content-to-remember]
 allowed-tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_store
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_search
+  - mcp__plugin_engram_engram__memory_store
+  - mcp__plugin_engram_engram__memory_search
 ---
 ```
 
@@ -149,8 +149,8 @@ allowed-tools:
 description: Search the memory graph for relevant knowledge — semantic, tag, or graph traversal
 argument-hint: [query]
 allowed-tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_search
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_traverse
+  - mcp__plugin_engram_engram__memory_search
+  - mcp__plugin_engram_engram__memory_traverse
   - Read
 ---
 ```
@@ -172,8 +172,8 @@ allowed-tools:
 description: Delete specific memories or purge a scope
 argument-hint: [memory-id or scope]
 allowed-tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_search
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_delete
+  - mcp__plugin_engram_engram__memory_search
+  - mcp__plugin_engram_engram__memory_delete
 ---
 ```
 
@@ -193,8 +193,8 @@ allowed-tools:
 ---
 description: Show SurrealDB connection status, memory counts, and storage statistics
 allowed-tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_stats
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__health_check
+  - mcp__plugin_engram_engram__memory_stats
+  - mcp__plugin_engram_engram__health_check
 ---
 ```
 
@@ -222,13 +222,13 @@ allowed-tools:
   - Read
   - Write
   - Bash(docker:*, surreal:*, curl:*)
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__health_check
+  - mcp__plugin_engram_engram__health_check
 ---
 ```
 
 **Behavior:**
 
-1. Check for existing settings at `.claude/surrealdb-memory.local.md`.
+1. Check for existing settings at `.claude/engram.local.md`.
 2. If `$1` provided, use it as the deployment mode; otherwise use `AskUserQuestion` to present the three options with trade-offs:
    - **embedded** — SurrealDB in-memory via Rust WASM, no external dependencies, data persists to a RocksDB file
    - **local** — SurrealDB in Docker container, shared across projects, persistent
@@ -237,7 +237,7 @@ allowed-tools:
    - embedded: check that SurrealDB binary is available
    - local: check Docker is running, offer to pull `surrealdb/surrealdb` image
    - cloud: prompt for endpoint URL and credentials
-4. Write `.claude/surrealdb-memory.local.md` with the chosen configuration.
+4. Write `.claude/engram.local.md` with the chosen configuration.
 5. Call `health_check` to verify the new connection works.
 6. Report success and remind to restart Claude Code for hooks to pick up new settings.
 
@@ -330,7 +330,7 @@ version: 0.1.0
 - **Embedded Mode** — In-process SurrealDB with RocksDB persistence; zero external dependencies; single-machine only
 - **Local Mode** — Docker-based SurrealDB; shared across projects on same machine; persistent volumes
 - **Cloud Mode** — SurrealDB Cloud or self-hosted remote; shared across machines; requires credentials
-- **Configuration File** — Structure of `.claude/surrealdb-memory.local.md`; all available settings
+- **Configuration File** — Structure of `.claude/engram.local.md`; all available settings
 - **Migration Between Modes** — How to export/import memories when switching deployment modes
 - **Troubleshooting** — Common connection issues, authentication failures, Docker problems
 - **Additional Resources** — Pointer to `references/deployment-modes.md`
@@ -384,12 +384,12 @@ description: >
 model: inherit
 color: yellow
 tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_search
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_store
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_update
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_delete
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_traverse
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_stats
+  - mcp__plugin_engram_engram__memory_search
+  - mcp__plugin_engram_engram__memory_store
+  - mcp__plugin_engram_engram__memory_update
+  - mcp__plugin_engram_engram__memory_delete
+  - mcp__plugin_engram_engram__memory_traverse
+  - mcp__plugin_engram_engram__memory_stats
   - Read
   - Grep
 ---
@@ -475,10 +475,10 @@ description: >
 model: inherit
 color: cyan
 tools:
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_search
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_update
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_traverse
-  - mcp__plugin_surrealdb-memory_surrealdb-memory__memory_stats
+  - mcp__plugin_engram_engram__memory_search
+  - mcp__plugin_engram_engram__memory_update
+  - mcp__plugin_engram_engram__memory_traverse
+  - mcp__plugin_engram_engram__memory_stats
   - Read
   - Grep
   - Glob
@@ -541,7 +541,7 @@ improving the quality of stored memories.
 
 ```json
 {
-  "description": "Automatic memory lifecycle hooks for surrealdb-memory plugin",
+  "description": "Automatic memory lifecycle hooks for engram plugin",
   "hooks": {
     "SessionStart": [
       {
@@ -603,7 +603,7 @@ improving the quality of stored memories.
 
 **Behavior:**
 
-1. Read `.claude/surrealdb-memory.local.md` — quick-exit if missing or `enabled: false`.
+1. Read `.claude/engram.local.md` — quick-exit if missing or `enabled: false`.
 2. Parse connection settings from frontmatter.
 3. Call the MCP server's `memory_search` tool (via the SurrealDB client) with:
    - Current working directory (to identify project scope)
@@ -681,7 +681,7 @@ improving the quality of stored memories.
 
 ## Configuration Discovery
 
-The plugin discovers user configuration from `.claude/surrealdb-memory.local.md` in the project root. This file uses YAML frontmatter for structured settings and a markdown body for additional context.
+The plugin discovers user configuration from `.claude/engram.local.md` in the project root. This file uses YAML frontmatter for structured settings and a markdown body for additional context.
 
 ### Settings File Template
 
@@ -738,7 +738,7 @@ Every hook script follows this pattern:
 #!/bin/bash
 set -euo pipefail
 
-STATE_FILE="$CLAUDE_PROJECT_DIR/.claude/surrealdb-memory.local.md"
+STATE_FILE="$CLAUDE_PROJECT_DIR/.claude/engram.local.md"
 
 # Quick exit if not configured
 if [[ ! -f "$STATE_FILE" ]]; then
@@ -771,7 +771,7 @@ The `/memory-setup` command creates this file. All other components (hooks, comm
 ```
 ┌──────────────┐     SessionStart     ┌──────────────────┐
 │  Hook:       │─────────────────────>│ MCP Server        │
-│  session-    │  "load memories"     │ (surrealdb-memory)│
+│  session-    │  "load memories"     │ (engram)│
 │  start.sh    │<─────────────────────│                   │
 │              │  systemMessage with  │  ┌─────────────┐  │
 └──────────────┘  relevant memories   │  │ SurrealDB   │  │
@@ -808,7 +808,7 @@ The `/memory-setup` command creates this file. All other components (hooks, comm
                      └──────────────────┘
 
 ┌────────────────────────────────┐
-│  .claude/surrealdb-memory      │
+│  .claude/engram      │
 │  .local.md                     │── read by all hooks + commands
 │  (user configuration)          │
 └────────────────────────────────┘

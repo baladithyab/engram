@@ -1,6 +1,6 @@
 # Deployment Modes
 
-> How surrealdb-memory connects to SurrealDB across five deployment modes:
+> How engram connects to SurrealDB across five deployment modes:
 > embedded SurrealKV (default), local server, Docker, remote/cloud, and
 > in-memory with snapshots.
 >
@@ -60,14 +60,14 @@ network. Data persists to a local directory.
 
 No configuration required. The plugin works out of the box.
 
-**Default data path:** `~/.claude/surrealdb-memory/data`
+**Default data path:** `~/.claude/engram/data`
 
 **Endpoint:** `surrealkv://{data_path}`
 
 ### How It Works
 
 1. MCP server starts, creates `SurrealDBClient` with `mode: "embedded"`
-2. Client calls `db.connect("surrealkv://~/.claude/surrealdb-memory/data")`
+2. Client calls `db.connect("surrealkv://~/.claude/engram/data")`
 3. SurrealDB opens/creates the SurrealKV database at that path
 4. Schema is initialized via `initSchema()` (all `IF NOT EXISTS` -- idempotent)
 5. Client is ready for queries
@@ -81,7 +81,7 @@ private resolveEndpoint(): string {
   switch (this.config.mode) {
     case "embedded":
       return `surrealkv://${this.config.dataPath
-        ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
+        ?? `${process.env.HOME}/.claude/engram/data`}`;
     // ...
   }
 }
@@ -90,7 +90,7 @@ private resolveEndpoint(): string {
 ### Directory Structure
 
 ```
-~/.claude/surrealdb-memory/
+~/.claude/engram/
   data/                    <-- SurrealKV data files
     *.db                   <-- Database files (managed by SurrealKV)
 ```
@@ -113,7 +113,7 @@ sessions (or other tools) can share the same database.
 
 ### Configuration
 
-Set via environment variables or `.claude/surrealdb-memory.local.md`:
+Set via environment variables or `.claude/engram.local.md`:
 
 ```yaml
 ---
@@ -130,7 +130,7 @@ database: default
 
 ### How It Works
 
-1. User starts SurrealDB separately: `surreal start rocksdb://~/.claude/surrealdb-memory/data`
+1. User starts SurrealDB separately: `surreal start rocksdb://~/.claude/engram/data`
 2. MCP server connects via WebSocket to the running instance
 3. Authentication with username/password
 4. Select namespace and database via `USE`
@@ -140,13 +140,13 @@ database: default
 
 ```bash
 # Start SurrealDB with RocksDB persistence
-surreal start rocksdb://~/.claude/surrealdb-memory/data \
+surreal start rocksdb://~/.claude/engram/data \
   --bind 0.0.0.0:8000 \
   --user root --pass root \
   --log info
 
 # Or with SurrealKV engine
-surreal start surrealkv://~/.claude/surrealdb-memory/data \
+surreal start surrealkv://~/.claude/engram/data \
   --bind 0.0.0.0:8000 \
   --user root --pass root
 ```
@@ -156,7 +156,7 @@ surreal start surrealkv://~/.claude/surrealdb-memory/data \
 The plugin will manage the server process lifecycle:
 
 ```bash
-PID_FILE="$HOME/.claude/surrealdb-memory/surreal.pid"
+PID_FILE="$HOME/.claude/engram/surreal.pid"
 
 # Check for existing instance
 if [ -f "$PID_FILE" ]; then
@@ -213,10 +213,10 @@ password: root
 ### Container Management
 
 ```bash
-CONTAINER_NAME="surrealdb-memory"
+CONTAINER_NAME="engram"
 IMAGE="surrealdb/surrealdb:latest"
 PORT=8000
-DATA_DIR="$HOME/.claude/surrealdb-memory/docker-data"
+DATA_DIR="$HOME/.claude/engram/docker-data"
 
 # Start container (create if needed)
 docker run -d \
@@ -229,7 +229,7 @@ docker run -d \
   rocksdb:///data
 
 # Or with docker-compose
-docker compose -f .claude/surrealdb-memory/docker-compose.yml up -d
+docker compose -f .claude/engram/docker-compose.yml up -d
 ```
 
 ### docker-compose.yml (Planned)
@@ -239,7 +239,7 @@ version: "3.8"
 services:
   surrealdb:
     image: surrealdb/surrealdb:latest
-    container_name: surrealdb-memory
+    container_name: engram
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -323,7 +323,7 @@ restored on startup.
 ```yaml
 ---
 mode: memory
-data_path: ~/.claude/surrealdb-memory/data
+data_path: ~/.claude/engram/data
 ---
 ```
 
@@ -353,7 +353,7 @@ async close(): Promise<void> {
 
 private async exportMemorySnapshot(): Promise<void> {
   const dataPath = this.config.dataPath
-    ?? `${process.env.HOME}/.claude/surrealdb-memory/data`;
+    ?? `${process.env.HOME}/.claude/engram/data`;
 
   mkdirSync(dataPath, { recursive: true });
 
@@ -399,7 +399,7 @@ The MCP server reads configuration from environment variables (set in `.mcp.json
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SURREAL_MODE` | `embedded` | Deployment mode |
-| `SURREAL_DATA_PATH` | `~/.claude/surrealdb-memory/data` | Data directory |
+| `SURREAL_DATA_PATH` | `~/.claude/engram/data` | Data directory |
 | `SURREAL_URL` | -- | Server URL for local/remote modes |
 | `SURREAL_USER` | `root` | Authentication username |
 | `SURREAL_PASS` | `root` | Authentication password |
@@ -408,12 +408,12 @@ The MCP server reads configuration from environment variables (set in `.mcp.json
 
 ### Project-Local Configuration File
 
-Advanced configuration uses `.claude/surrealdb-memory.local.md` with YAML frontmatter.
+Advanced configuration uses `.claude/engram.local.md` with YAML frontmatter.
 The file is searched in the following order:
 
-1. `{project_root}/.claude/surrealdb-memory.local.md`
-2. `{CLAUDE_PROJECT_ROOT}/.claude/surrealdb-memory.local.md`
-3. `{cwd}/.claude/surrealdb-memory.local.md`
+1. `{project_root}/.claude/engram.local.md`
+2. `{CLAUDE_PROJECT_ROOT}/.claude/engram.local.md`
+3. `{cwd}/.claude/engram.local.md`
 
 ```yaml
 ---
@@ -428,7 +428,7 @@ database: my_project
 
 # SurrealDB Memory Configuration
 
-This file configures the surrealdb-memory plugin for this project.
+This file configures the engram plugin for this project.
 The YAML frontmatter above is parsed by the MCP server.
 Everything below the frontmatter is documentation (ignored by the parser).
 ```
@@ -446,7 +446,7 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
   ].filter(Boolean) as string[];
 
   for (const root of roots) {
-    const configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    const configPath = join(root, ".claude", "engram.local.md");
     if (!existsSync(configPath)) continue;
 
     // Parse YAML frontmatter between --- delimiters
@@ -539,7 +539,7 @@ the plugin degrades gracefully rather than blocking the user.
 Writes that fail during an outage are appended to a local JSONL file:
 
 ```
-~/.claude/surrealdb-memory/fallback-queue.jsonl
+~/.claude/engram/fallback-queue.jsonl
 ```
 
 Each line is a JSON object with the operation and its parameters:
@@ -593,7 +593,7 @@ Data can be migrated between deployment modes using SurrealDB's native export/im
 
 ```bash
 # Export from embedded
-surreal export --conn surrealkv://~/.claude/surrealdb-memory/data \
+surreal export --conn surrealkv://~/.claude/engram/data \
   --ns memory --db default > backup.surql
 
 # Import to local server

@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
 # Skip if no data directory exists yet (plugin not initialized)
-DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/surrealdb-memory/data}"
+DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/engram/data}"
 if [ "$SURREAL_MODE" = "embedded" ] && [ ! -d "$DATA_PATH" ]; then
   exit 0
 fi
@@ -30,7 +30,7 @@ fi
 
 CONTEXT="## Memory System Active
 
-The surrealdb-memory plugin is connected (mode: ${SURREAL_MODE}).
+The engram plugin is connected (mode: ${SURREAL_MODE}).
 
 ### Memory Hierarchy
 Memory is organized in three tiers, each in its own SurrealDB database:

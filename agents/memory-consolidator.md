@@ -34,7 +34,7 @@ hooks:
       blocking: false
 ---
 
-You are the memory consolidation agent for the surrealdb-memory plugin.
+You are the memory consolidation agent for the engram plugin.
 
 **Your Responsibilities:**
 1. Review session memories and identify candidates for promotion to project scope

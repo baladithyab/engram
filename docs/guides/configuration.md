@@ -1,12 +1,12 @@
 # Configuration Guide
 
-How to configure the surrealdb-memory plugin. The plugin works with zero
+How to configure the engram plugin. The plugin works with zero
 configuration using embedded SurrealKV. This guide covers customization
 for other deployment modes and tuning behavior.
 
 ## Configuration File
 
-The plugin reads configuration from `.claude/surrealdb-memory.local.md` in the
+The plugin reads configuration from `.claude/engram.local.md` in the
 project root. This file uses YAML frontmatter for structured settings:
 
 ```markdown
@@ -22,7 +22,7 @@ connection:
   database: default
 
 local:
-  data_path: .claude/surrealdb-memory/data
+  data_path: .claude/engram/data
   engine: rocksdb
   port: 8000
   auto_start: true
@@ -30,7 +30,7 @@ local:
 
 persistence:
   snapshot_on_stop: true
-  snapshot_path: .claude/surrealdb-memory/snapshots
+  snapshot_path: .claude/engram/snapshots
   max_snapshots: 5
 
 memory:
@@ -46,7 +46,7 @@ above to change settings.
 ```
 
 This file should NOT be committed to version control -- add
-`.claude/surrealdb-memory.local.md` to `.gitignore`.
+`.claude/engram.local.md` to `.gitignore`.
 
 ## Configuration Reference
 
@@ -74,12 +74,12 @@ For `embedded`, `memory`, and `local` modes where the plugin manages SurrealDB.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `local.data_path` | string | `.claude/surrealdb-memory/data` | Where to store database files |
+| `local.data_path` | string | `.claude/engram/data` | Where to store database files |
 | `local.engine` | string | `rocksdb` | Storage engine: `rocksdb` or `surrealkv` |
 | `local.port` | number | `8000` | Port for local SurrealDB server |
 | `local.auto_start` | boolean | `true` | Start SurrealDB on MCP server startup |
 | `local.auto_stop` | boolean | `true` | Stop SurrealDB on MCP server shutdown |
-| `local.pid_file` | string | `.claude/surrealdb-memory/surreal.pid` | PID file for process management |
+| `local.pid_file` | string | `.claude/engram/surreal.pid` | PID file for process management |
 | `local.log_level` | string | `info` | SurrealDB log level |
 | `local.startup_timeout_ms` | number | `5000` | Max wait for SurrealDB to start |
 
@@ -89,10 +89,10 @@ For `docker` mode only.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `docker.container_name` | string | `surrealdb-memory` | Docker container name |
+| `docker.container_name` | string | `engram` | Docker container name |
 | `docker.image` | string | `surrealdb/surrealdb:latest` | Docker image |
 | `docker.port` | number | `8000` | Host port mapping |
-| `docker.data_path` | string | `.claude/surrealdb-memory/docker-data` | Volume mount path |
+| `docker.data_path` | string | `.claude/engram/docker-data` | Volume mount path |
 | `docker.auto_start` | boolean | `true` | Start container on MCP startup |
 | `docker.auto_stop` | boolean | `false` | Stop container on MCP shutdown |
 | `docker.restart_policy` | string | `unless-stopped` | Docker restart policy |
@@ -102,7 +102,7 @@ For `docker` mode only.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `persistence.snapshot_on_stop` | boolean | `true` | Export data when session ends (in-memory mode) |
-| `persistence.snapshot_path` | string | `.claude/surrealdb-memory/snapshots` | Where to store snapshots |
+| `persistence.snapshot_path` | string | `.claude/engram/snapshots` | Where to store snapshots |
 | `persistence.export_format` | string | `surql` | Snapshot format: `surql` or `json` |
 | `persistence.max_snapshots` | number | `5` | Number of snapshots to keep |
 
@@ -135,7 +135,7 @@ server directly via `.mcp.json`.
 | Variable | Maps to | Default |
 |----------|---------|---------|
 | `SURREAL_MODE` | `mode` | `embedded` |
-| `SURREAL_DATA_PATH` | `local.data_path` | `~/.claude/surrealdb-memory/data` |
+| `SURREAL_DATA_PATH` | `local.data_path` | `~/.claude/engram/data` |
 | `SURREAL_URL` | `connection.url` | -- |
 | `SURREAL_USER` | `connection.username` | `root` |
 | `SURREAL_PASS` | `connection.password` | `root` |
@@ -156,7 +156,7 @@ connection:
 Values resolve in this order (later overrides earlier):
 
 1. **Built-in defaults** -- hardcoded in the MCP server (`mcp/src/index.ts`)
-2. **Config file** -- `.claude/surrealdb-memory.local.md` frontmatter
+2. **Config file** -- `.claude/engram.local.md` frontmatter
 3. **Environment variables** -- `SURREAL_*` prefix
 4. **`${VAR}` expansion** -- values containing `${ENV_VAR}` are expanded last
 
@@ -191,7 +191,7 @@ local:
 
 persistence:
   snapshot_on_stop: true
-  snapshot_path: .claude/surrealdb-memory/snapshots
+  snapshot_path: .claude/engram/snapshots
   max_snapshots: 5
 ---
 ```
@@ -212,7 +212,7 @@ connection:
   database: default
 
 local:
-  data_path: .claude/surrealdb-memory/data
+  data_path: .claude/engram/data
   engine: rocksdb
   port: 8000
   auto_start: true
@@ -236,10 +236,10 @@ connection:
   database: default
 
 docker:
-  container_name: surrealdb-memory
+  container_name: engram
   image: surrealdb/surrealdb:latest
   port: 8000
-  data_path: .claude/surrealdb-memory/docker-data
+  data_path: .claude/engram/docker-data
   auto_start: true
   auto_stop: false
 ---

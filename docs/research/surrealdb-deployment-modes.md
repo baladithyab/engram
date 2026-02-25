@@ -317,7 +317,7 @@ services:
   surrealdb:
     image: surrealdb/surrealdb:latest
     pull_policy: always
-    container_name: surrealdb-memory
+    container_name: engram
     ports:
       - "8000:8000"
     volumes:
