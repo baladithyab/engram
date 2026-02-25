@@ -369,6 +369,30 @@ export class SurrealDBClient {
       }
     }
 
+    // Log retrieval event in project scope (non-critical)
+    try {
+      await this.withScope("project", async () => {
+        await this.db.query(
+          `CREATE retrieval_log SET
+            event_type = 'search',
+            query = $query,
+            strategy = 'bm25',
+            results_count = $count,
+            memory_ids = $ids,
+            session_id = $session_id,
+            created_at = time::now()`,
+          {
+            query: params.query,
+            count: allMemories.length,
+            ids: allMemories.filter((m: any) => m?.id).map((m: any) => m.id),
+            session_id: this.scopeIds.sessionId,
+          }
+        );
+      });
+    } catch {
+      // Retrieval logging is non-critical — don't break recall
+    }
+
     return allMemories;
   }
 
