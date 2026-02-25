@@ -1,6 +1,6 @@
 {
-  "name": "surrealdb-memory",
-  "version": "0.1.0",
+  "name": "engram",
+  "version": "0.2.0",
   "description": "Persistent, hierarchical, self-evolving memory for Claude Code powered by SurrealDB",
   "author": "baladita",
   "hooks": "hooks/hooks.json",

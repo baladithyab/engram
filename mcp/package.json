@@ -1,7 +1,7 @@
 {
-  "name": "surrealdb-memory-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for SurrealDB-backed Claude Code memory",
+  "name": "engram-mcp",
+  "version": "0.2.0",
+  "description": "MCP server for Engram — SurrealDB-backed Claude Code memory",
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
