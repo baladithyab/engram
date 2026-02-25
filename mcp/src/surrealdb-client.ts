@@ -298,7 +298,7 @@ export class SurrealDBClient {
     limit?: number;
   }): Promise<unknown[]> {
     const buildQuery = () => {
-      let surql = `SELECT *, search::score(1) AS relevance
+      let surql = `SELECT *, search::score(1) AS relevance, memory_strength
         FROM memory
         WHERE content @1@ $query
           AND status = 'active'`;
@@ -307,7 +307,7 @@ export class SurrealDBClient {
         surql += ` AND memory_type = $memory_type`;
       }
 
-      surql += ` ORDER BY relevance DESC LIMIT $limit`;
+      surql += ` ORDER BY (search::score(1) * 0.6 + memory_strength * 0.4) DESC LIMIT $limit`;
       return surql;
     };
 
