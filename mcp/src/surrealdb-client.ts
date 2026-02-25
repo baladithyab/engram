@@ -45,7 +45,8 @@ export function generateScopeIds(): ScopeIdentifiers {
 }
 
 /**
- * Read plugin config from .claude/surrealdb-memory.local.md YAML frontmatter.
+ * Read plugin config from .claude/engram.local.md YAML frontmatter.
+ * Falls back to .claude/surrealdb-memory.local.md for backwards compatibility.
  * Returns partial config — caller merges with defaults.
  */
 export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
@@ -56,7 +57,11 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
   ].filter(Boolean) as string[];
 
   for (const root of roots) {
-    const configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    // Try new name first, then legacy name
+    let configPath = join(root, ".claude", "engram.local.md");
+    if (!existsSync(configPath)) {
+      configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    }
     if (!existsSync(configPath)) continue;
 
     try {
@@ -153,7 +158,7 @@ export class SurrealDBClient {
     switch (this.config.mode) {
       case "embedded":
         // SurrealKV embedded — persistent, zero-config
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
       case "local":
         // Local SurrealDB server via WebSocket
         return this.config.url ?? "ws://localhost:8000";
@@ -164,7 +169,7 @@ export class SurrealDBClient {
         // In-memory mode — fast, ephemeral (data lost on close unless exported)
         return "mem://";
       default:
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
     }
   }
 
@@ -232,6 +237,16 @@ export class SurrealDBClient {
         await this.db.use({ namespace: this.config.namespace, database: currentDb });
       }
     }
+  }
+
+  /**
+   * Public wrapper around withScope() for running arbitrary SurrealQL in a given scope.
+   */
+  async queryInScope<T = unknown>(scope: string, surql: string, vars?: Record<string, unknown>): Promise<T[]> {
+    return this.withScope(scope, async () => {
+      const result = await this.db.query(surql, vars);
+      return result.flat() as T[];
+    });
   }
 
   async storeMemory(params: {
@@ -426,7 +441,7 @@ export class SurrealDBClient {
    */
   private async exportMemorySnapshot(): Promise<void> {
     try {
-      const dataPath = this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`;
+      const dataPath = this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`;
       const { mkdirSync, writeFileSync } = await import("node:fs");
 
       mkdirSync(dataPath, { recursive: true });
