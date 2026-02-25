@@ -171,6 +171,16 @@ export const EVENTS_SQL = `
   };
 `;
 
+/** Seed default evolution_state values for system tuning parameters */
+export const EVOLUTION_SEED_SQL = `
+  INSERT INTO evolution_state (key, value, updated_at) VALUES
+    ('scope_weights', { session: 1.5, project: 1.0, user: 0.7 }, time::now()),
+    ('decay_half_lives', { working: 0.042, episodic: 1.0, semantic: 7.0, procedural: 30.0 }, time::now()),
+    ('promotion_thresholds', { importance: 0.5, access_count: 2 }, time::now()),
+    ('retrieval_strategy', { default_strategy: 'bm25' }, time::now())
+  ON DUPLICATE KEY UPDATE updated_at = updated_at;
+`;
+
 /** All schema SQL in execution order */
 export const ALL_SCHEMA_SQL = [
   ANALYZER_SQL,
@@ -181,4 +191,5 @@ export const ALL_SCHEMA_SQL = [
   RETRIEVAL_LOG_TABLE_SQL,
   EVOLUTION_STATE_TABLE_SQL,
   EVENTS_SQL,
+  EVOLUTION_SEED_SQL,
 ];
