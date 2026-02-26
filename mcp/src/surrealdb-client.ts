@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ALL_SCHEMA_SQL } from "./schema.js";
+import type { EmbeddingProvider } from "./embeddings/provider.js";
 
 export type DeploymentMode = "embedded" | "local" | "remote" | "memory";
 
@@ -14,6 +15,11 @@ export interface SurrealDBConfig {
   password: string;
   namespace: string;
   database: string;
+  embeddingProvider?: string;
+  embeddingUrl?: string;
+  embeddingModel?: string;
+  embeddingApiKey?: string;
+  embeddingDimensions?: number;
 }
 
 /**
@@ -103,6 +109,21 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
           case "database":
             config.database = value;
             break;
+          case "embedding_provider":
+            config.embeddingProvider = value;
+            break;
+          case "embedding_url":
+            config.embeddingUrl = value;
+            break;
+          case "embedding_model":
+            config.embeddingModel = value;
+            break;
+          case "embedding_api_key":
+            config.embeddingApiKey = value;
+            break;
+          case "embedding_dimensions":
+            config.embeddingDimensions = parseInt(value, 10) || undefined;
+            break;
         }
       }
 
@@ -120,11 +141,13 @@ export class SurrealDBClient {
   private config: SurrealDBConfig;
   private connected = false;
   private scopeIds: ScopeIdentifiers;
+  private embedder: EmbeddingProvider | null;
 
-  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers) {
+  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers, embedder?: EmbeddingProvider) {
     this.config = config;
     this.db = new Surreal();
     this.scopeIds = scopeIds ?? generateScopeIds();
+    this.embedder = embedder ?? null;
   }
 
   async connect(): Promise<void> {
@@ -258,6 +281,16 @@ export class SurrealDBClient {
     importance?: number;
     metadata?: Record<string, unknown>;
   }): Promise<unknown> {
+    // Auto-generate embedding if provider exists and none supplied
+    let embedding = params.embedding ?? null;
+    if (!embedding && this.embedder) {
+      try {
+        embedding = await this.embedder.embed(params.content);
+      } catch {
+        // Embedding generation is non-critical — store without it
+      }
+    }
+
     return this.withScope(params.scope, async () => {
       const [result] = await this.db.query(
         `CREATE memory SET
@@ -277,7 +310,7 @@ export class SurrealDBClient {
           memory_type: params.memoryType,
           scope: params.scope,
           tags: params.tags ?? [],
-          embedding: params.embedding ?? null,
+          embedding,
           importance: params.importance ?? 0.5,
           metadata: params.metadata ?? null,
         }
@@ -297,6 +330,16 @@ export class SurrealDBClient {
     memoryType?: string;
     limit?: number;
   }): Promise<unknown[]> {
+    // Generate query embedding if embedder available (non-critical)
+    let queryEmbedding: number[] | null = null;
+    if (this.embedder) {
+      try {
+        queryEmbedding = await this.embedder.embed(params.query);
+      } catch {
+        // Embedding generation failed — fall back to BM25-only
+      }
+    }
+
     const buildQuery = () => {
       let surql = `SELECT *, search::score(1) AS relevance, memory_strength
         FROM memory
@@ -307,15 +350,22 @@ export class SurrealDBClient {
         surql += ` AND memory_type = $memory_type`;
       }
 
-      surql += ` ORDER BY (search::score(1) * 0.6 + memory_strength * 0.4) DESC LIMIT $limit`;
+      if (queryEmbedding) {
+        surql += ` ORDER BY (search::score(1) * 0.3 + vector::similarity::cosine(embedding, $embedding) * 0.3 + memory_strength * 0.4) DESC LIMIT $limit`;
+      } else {
+        surql += ` ORDER BY (search::score(1) * 0.6 + memory_strength * 0.4) DESC LIMIT $limit`;
+      }
       return surql;
     };
 
-    const vars = {
+    const vars: Record<string, unknown> = {
       query: params.query,
       memory_type: params.memoryType ?? null,
       limit: params.limit ?? 10,
     };
+    if (queryEmbedding) {
+      vars.embedding = queryEmbedding;
+    }
 
     let allMemories: any[] = [];
 
@@ -376,13 +426,14 @@ export class SurrealDBClient {
           `CREATE retrieval_log SET
             event_type = 'search',
             query = $query,
-            strategy = 'bm25',
+            strategy = $strategy,
             results_count = $count,
             memory_ids = $ids,
             session_id = $session_id,
             created_at = time::now()`,
           {
             query: params.query,
+            strategy: queryEmbedding ? "hybrid" : "bm25",
             count: allMemories.length,
             ids: allMemories.filter((m: any) => m?.id).map((m: any) => m.id),
             session_id: this.scopeIds.sessionId,
