@@ -29,15 +29,27 @@ UPSERT t SET key = 'mykey', val = 'x', updated_at = time::now() WHERE key = 'myk
 
 There is no `ON DUPLICATE KEY`. Use `UPSERT ... WHERE` for idempotent inserts.
 
-### COMPUTED fields use VALUE, not COMPUTED
+### VALUE vs COMPUTED — Two Different Things
+
+SurrealDB 3.0 has TWO ways to derive field values:
 
 ```surql
--- Correct (SurrealDB 3.0)
-DEFINE FIELD IF NOT EXISTS strength ON memory VALUE importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at));
+-- VALUE: evaluated at WRITE time, result is STORED on disk
+-- Use for fields that should persist and be fast to read
+DEFINE FIELD IF NOT EXISTS strength ON memory VALUE
+  importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at));
 
--- Wrong (older docs may show this)
-DEFINE FIELD IF NOT EXISTS strength ON memory COMPUTED ...;
+-- COMPUTED: evaluated at READ time, NEVER stored
+-- Use for fields that must always reflect current state
+DEFINE FIELD IF NOT EXISTS age ON person COMPUTED
+  time::year(time::now()) - time::year(born);
 ```
+
+**Key difference:** `VALUE` runs once when the record is written/updated and stores
+the result. `COMPUTED` runs on every SELECT and is always fresh but uses CPU.
+
+**COMPUTED restrictions:** Cannot combine with VALUE, DEFAULT, READONLY, ASSERT,
+REFERENCE, or FLEXIBLE. Cannot be nested or used on ID fields.
 
 ### SCHEMAFULL vs SCHEMALESS
 
@@ -132,10 +144,11 @@ Distance options: `COSINE`, `EUCLIDEAN`, `MANHATTAN`.
 
 ## Hybrid Search (BM25 + HNSW)
 
-SurrealDB does not have a built-in `search::rrf()` that combines BM25 and HNSW
-in a single query automatically. Combine scores manually:
+SurrealDB 3.0 provides `search::rrf()` and `search::linear()` for combining
+FTS and vector scores. You can also combine scores manually for custom weighting:
 
 ```surql
+-- Option 1: Manual weighted combination (more control)
 SELECT *,
   search::score(1) AS bm25_score,
   vector::similarity::cosine(embedding, $embedding) AS vec_score
@@ -143,7 +156,18 @@ FROM memory
 WHERE content @1@ $query AND status = 'active'
 ORDER BY (search::score(1) * 0.3 + vector::similarity::cosine(embedding, $embedding) * 0.3 + memory_strength * 0.4) DESC
 LIMIT $limit;
+
+-- Option 2: search::rrf() — Reciprocal Rank Fusion (new in 3.0)
+-- Combines multiple ranked result lists automatically
+-- search::rrf(score1, score2, ...) returns a fused relevance score
 ```
+
+New search functions in 3.0:
+- `search::rrf()` — Reciprocal Rank Fusion across multiple score sources
+- `search::linear()` — Linear combination of scores
+- `search::offsets()` — Token offset positions in matched text
+- `search::highlight()` — Highlighted matching fragments
+- `search::score(N)` — BM25 relevance score for index N
 
 ## Common Patterns
 
@@ -252,6 +276,35 @@ SELECT count() FROM memory GROUP ALL;
 | `retrieval_log` | SCHEMAFULL | query, strategy, results_count, memory_ids, was_useful |
 | `evolution_state` | SCHEMAFULL | key (unique), value (flexible object) |
 
+## SurrealDB 3.0 Breaking Changes
+
+These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
+
+| Old (2.x) | New (3.0) | Impact |
+|-----------|-----------|--------|
+| `SEARCH ANALYZER` | `FULLTEXT ANALYZER` | FTS index definitions |
+| `FLEXIBLE TYPE foo` | `TYPE foo FLEXIBLE` | FLEXIBLE keyword position |
+| `<future> { expr }` in VALUE | `COMPUTED expr` | Futures removed entirely |
+| Optional operator `?` | `.?` | Optional chaining syntax |
+| Fuzzy operators `~`, `?~`, `!~` | `string::similarity::*` functions | Fuzzy matching removed |
+| `type::is::record()` | `type::is_record()` | `::is::` → underscore |
+| `string::is::hexadecimal()` | `string::is_hexadecimal()` | Same pattern |
+| HTTP headers unprefixed | `surreal-` prefix required | API clients |
+| Default bind `0.0.0.0` | `127.0.0.1` | CLI/embedded |
+| `--auth` CLI flag | `--unauthenticated` (auth on by default) | CLI scripts |
+
+### New in 3.0
+
+- `COMPUTED` fields: evaluated on every read, never stored. Cannot combine with VALUE/DEFAULT/READONLY/ASSERT/REFERENCE/FLEXIBLE
+- `DEFINE EVENT ... ASYNC`: runs outside the triggering transaction
+- `$input` parameter in events (replaces `$value`)
+- `search::rrf()`: Reciprocal Rank Fusion for combining FTS + vector scores
+- `search::linear()`: linear combination of search scores
+- `search::offsets()`: token offset positions in matches
+- `@@ matches` operator now supports `AND` / `OR` inside full-text matches
+- `DEFINE TABLE ... TYPE NORMAL | RELATION | ANY`
+- `DEFINE FIELD ... REFERENCE ON DELETE REJECT | CASCADE`
+
 ## Anti-Patterns
 
 - Do NOT use `ON DUPLICATE KEY UPDATE` — use `UPSERT ... WHERE`
@@ -262,5 +315,10 @@ SELECT count() FROM memory GROUP ALL;
 - Do NOT assume `NULL` — SurrealDB uses `NONE` for absent values
 - Do NOT use `SEARCH ANALYZER` — use `FULLTEXT ANALYZER` (changed in SurrealDB 3.0)
 - Do NOT use `FLEXIBLE TYPE` — use `TYPE ... FLEXIBLE` (FLEXIBLE goes after TYPE in 3.0)
+- Do NOT use futures `<future> { ... }` — removed in 3.0, use `COMPUTED` instead
+- Do NOT use `?` for optional — use `.?` in 3.0
+- Do NOT use fuzzy operators (`~`, `?~`, `!~`) — use `string::similarity::*` functions
+- Do NOT use `::is::` function names — use underscore: `type::is_record()` not `type::is::record()`
 - Do NOT call `signin()` in embedded mode — surrealkv:// runs in-process with full access
 - Do NOT write to undeclared fields on `SCHEMAFULL` tables — they will error at runtime
+- Do NOT combine `COMPUTED` with VALUE, DEFAULT, READONLY, ASSERT, REFERENCE, or FLEXIBLE
