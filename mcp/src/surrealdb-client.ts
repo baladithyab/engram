@@ -181,7 +181,7 @@ export class SurrealDBClient {
     switch (this.config.mode) {
       case "embedded":
         // SurrealKV embedded — persistent, zero-config
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
+        return `surrealkv://${this.config.dataPath ?? this.resolveDefaultDataPath()}`;
       case "local":
         // Local SurrealDB server via WebSocket
         return this.config.url ?? "ws://localhost:8000";
@@ -192,8 +192,24 @@ export class SurrealDBClient {
         // In-memory mode — fast, ephemeral (data lost on close unless exported)
         return "mem://";
       default:
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
+        return `surrealkv://${this.config.dataPath ?? this.resolveDefaultDataPath()}`;
     }
+  }
+
+  /** Resolve default data path with legacy fallback for migration */
+  private resolveDefaultDataPath(): string {
+    const newPath = `${process.env.HOME}/.claude/engram/data`;
+    const legacyPath = `${process.env.HOME}/.claude/surrealdb-memory/data`;
+    // Use legacy path if it exists and new path doesn't (seamless migration)
+    try {
+      const { existsSync } = require("node:fs");
+      if (!existsSync(newPath) && existsSync(legacyPath)) {
+        return legacyPath;
+      }
+    } catch {
+      // fs check failed — use new path
+    }
+    return newPath;
   }
 
   /**
@@ -340,6 +356,24 @@ export class SurrealDBClient {
       }
     }
 
+    // Read evolved retrieval weights from evolution_state (fall back to defaults)
+    let bm25Weight = 0.3;
+    let vecWeight = 0.3;
+    let strengthWeight = 0.4;
+    try {
+      const rows = await this.withScope("project", async () => {
+        return await this.db.query(
+          `SELECT value FROM evolution_state WHERE key = 'retrieval_weights' LIMIT 1`
+        );
+      });
+      const evolved = (rows as any[]).flat()[0]?.value;
+      if (evolved?.bm25 !== undefined) bm25Weight = evolved.bm25;
+      if (evolved?.vector !== undefined) vecWeight = evolved.vector;
+      if (evolved?.strength !== undefined) strengthWeight = evolved.strength;
+    } catch {
+      // evolution_state not available — use defaults
+    }
+
     const buildQuery = () => {
       let surql = `SELECT *, search::score(1) AS relevance, memory_strength
         FROM memory
@@ -351,9 +385,11 @@ export class SurrealDBClient {
       }
 
       if (queryEmbedding) {
-        surql += ` ORDER BY (search::score(1) * 0.3 + vector::similarity::cosine(embedding, $embedding) * 0.3 + memory_strength * 0.4) DESC LIMIT $limit`;
+        surql += ` ORDER BY (search::score(1) * ${bm25Weight} + vector::similarity::cosine(embedding, $embedding) * ${vecWeight} + memory_strength * ${strengthWeight}) DESC LIMIT $limit`;
       } else {
-        surql += ` ORDER BY (search::score(1) * 0.6 + memory_strength * 0.4) DESC LIMIT $limit`;
+        // BM25-only: redistribute vector weight to BM25
+        const bm25Only = bm25Weight + vecWeight;
+        surql += ` ORDER BY (search::score(1) * ${bm25Only} + memory_strength * ${strengthWeight}) DESC LIMIT $limit`;
       }
       return surql;
     };
@@ -376,8 +412,19 @@ export class SurrealDBClient {
         return (result as any[]).flat().map((m: any) => ({ ...m, _scope: params.scope }));
       });
     } else {
-      // Search all three scopes and merge with priority weighting
-      const scopeWeights = { session: 1.5, project: 1.0, user: 0.7 };
+      // Search all three scopes and merge with priority weighting (evolved or defaults)
+      let scopeWeights: Record<string, number> = { session: 1.5, project: 1.0, user: 0.7 };
+      try {
+        const rows = await this.withScope("project", async () => {
+          return await this.db.query(
+            `SELECT value FROM evolution_state WHERE key = 'scope_weights' LIMIT 1`
+          );
+        });
+        const evolved = (rows as any[]).flat()[0]?.value;
+        if (evolved?.session !== undefined) scopeWeights = evolved as Record<string, number>;
+      } catch {
+        // evolution_state not available — use defaults
+      }
 
       for (const [scope, weight] of Object.entries(scopeWeights)) {
         try {

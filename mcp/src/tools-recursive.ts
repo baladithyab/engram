@@ -247,7 +247,7 @@ export function registerRecursiveTools(server: McpServer, db: SurrealDBClient): 
           }
 
         } else if (partition_by === "scope") {
-          for (const s of SCOPES) {
+          for (const s of scopesToQuery) {
             try {
               const rows = await db.queryInScope<{ count: number; avg_imp: number }>(
                 s,
