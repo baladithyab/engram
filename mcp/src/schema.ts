@@ -32,7 +32,7 @@ export const MEMORY_TABLE_SQL = `
   DEFINE FIELD IF NOT EXISTS created_at ON memory TYPE datetime DEFAULT time::now();
   DEFINE FIELD IF NOT EXISTS updated_at ON memory TYPE datetime DEFAULT time::now();
   DEFINE FIELD IF NOT EXISTS last_accessed_at ON memory TYPE datetime DEFAULT time::now();
-  DEFINE FIELD IF NOT EXISTS metadata ON memory FLEXIBLE TYPE option<object>;
+  DEFINE FIELD IF NOT EXISTS metadata ON memory TYPE option<object> FLEXIBLE;
 
   -- Computed memory strength: exponential decay weighted by memory type.
   -- Procedural decays slowest (0.999), semantic mid (0.995), episodic faster (0.99), working fastest (0.95).

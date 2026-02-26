@@ -1,4 +1,5 @@
-import Surreal from "surrealdb";
+import { Surreal } from "surrealdb";
+import { createNodeEngines } from "@surrealdb/node";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -145,7 +146,9 @@ export class SurrealDBClient {
 
   constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers, embedder?: EmbeddingProvider) {
     this.config = config;
-    this.db = new Surreal();
+    this.db = new Surreal({
+      engines: createNodeEngines(),
+    });
     this.scopeIds = scopeIds ?? generateScopeIds();
     this.embedder = embedder ?? null;
   }
@@ -156,8 +159,8 @@ export class SurrealDBClient {
     try {
       await this.db.connect(endpoint);
 
-      // Memory mode doesn't need auth in SurrealDB embedded
-      if (this.config.mode !== "memory") {
+      // Embedded modes (memory, embedded) don't need auth — they run in-process
+      if (this.config.mode === "local" || this.config.mode === "remote") {
         await this.db.signin({
           username: this.config.username,
           password: this.config.password,
