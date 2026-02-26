@@ -108,9 +108,9 @@ Four types with different decay half-lives:
 | PreCompact | **E**ncode | Save critical context before compaction |
 | Stop | **E**+**U**+**M** | Store learnings, strengthen accessed, consolidate |
 | TeammateIdle | **M**anage | Assign memory maintenance |
-| PermissionRequest | — | Auto-approve all 18 memory MCP tools |
+| PermissionRequest | — | Auto-approve all 17 memory MCP tools |
 
-## MCP Tools (18 total)
+## MCP Tools (17 total)
 
 ### Core Tools (9)
 
@@ -126,12 +126,17 @@ Four types with different decay half-lives:
 | `forget_memory` | Soft-delete |
 | `get_memory_status` | Per-scope counts and connection info |
 
-### Code Mode Tools (4) — Phase 3
+### Code Mode Tools (2) — Phase 3
 
 | Tool | Purpose |
 |------|---------|
 | `engram_explore` | Progressive manifest discovery (depth 0-3: counts → stats → schema → samples) |
 | `engram_execute` | Arbitrary SurrealQL with AST validation (read-only default, write opt-in) |
+
+### Skills Tools (2) — Phase 3
+
+| Tool | Purpose |
+|------|---------|
 | `recall_skill` | Find and execute stored #surql-skill procedural memories |
 | `mark_retrieval_useful` | Explicit feedback signal for evolution loop |
 
@@ -204,14 +209,14 @@ Legacy data path fallback: if `~/.claude/engram/data` doesn't exist but
 @docs/guides/developing.md
 
 ### Done
-- Plugin scaffold, MCP server, 18 tools, 10 hooks, 6 commands, 4 skills, 1 agent
+- Plugin scaffold, MCP server, 17 tools, 10 hooks, 6 commands, 4 skills, 1 agent
 - Hierarchical scope isolation (3 SurrealDB databases per session)
 - MemEvolve EURM pipeline across all hooks
 - Exponential decay with type-specific half-lives and access strengthening
 - Knowledge graph schema (entity + relates_to)
 - Multi-deployment mode support (embedded, memory, local, remote)
 - Auto-config Setup hook + interactive /memory-setup wizard
-- PermissionRequest auto-approval for all 18 memory tools
+- PermissionRequest auto-approval for all 17 memory tools
 - Embedding pipeline (local @xenova/transformers + API provider)
 - Hybrid BM25+HNSW search with evolved weights
 - Code Mode interface (engram_explore, engram_execute with AST validator)

@@ -52,6 +52,9 @@ export const MEMORY_TABLE_SQL = `
   DEFINE INDEX IF NOT EXISTS memory_type_idx ON memory FIELDS memory_type;
   DEFINE INDEX IF NOT EXISTS memory_status ON memory FIELDS status;
   DEFINE INDEX IF NOT EXISTS memory_tags ON memory FIELDS tags;
+  DEFINE INDEX IF NOT EXISTS memory_status_scope ON memory FIELDS status, scope;
+  DEFINE INDEX IF NOT EXISTS memory_created_at ON memory FIELDS created_at;
+  DEFINE INDEX IF NOT EXISTS memory_last_accessed ON memory FIELDS last_accessed_at;
 
   -- BM25 full-text search index
   DEFINE INDEX IF NOT EXISTS memory_content_search ON memory
@@ -159,7 +162,11 @@ export const EVENTS_SQL = `
   };
 
   -- Auto-queue memories for consolidation when access drops off
-  DEFINE EVENT IF NOT EXISTS memory_decay_check ON memory WHEN $after.status = 'active' THEN {
+  -- Only fires on UPDATE when last_accessed_at actually changes (throttled)
+  DEFINE EVENT IF NOT EXISTS memory_decay_check ON memory WHEN
+    $event = 'UPDATE' AND $after.status = 'active'
+    AND $before.last_accessed_at != $after.last_accessed_at
+  THEN {
     LET $age_days = duration::days(time::now() - $after.created_at);
     LET $since_access = duration::days(time::now() - $after.last_accessed_at);
     IF $age_days > 30 AND $since_access > 14 AND $after.importance < 0.3 THEN
@@ -177,6 +184,7 @@ export const EVOLUTION_SEED_SQL = [
   `UPSERT evolution_state SET key = 'decay_half_lives', value = { working: 0.042, episodic: 1.0, semantic: 7.0, procedural: 30.0 }, updated_at = time::now() WHERE key = 'decay_half_lives';`,
   `UPSERT evolution_state SET key = 'promotion_thresholds', value = { importance: 0.5, access_count: 2 }, updated_at = time::now() WHERE key = 'promotion_thresholds';`,
   `UPSERT evolution_state SET key = 'retrieval_strategy', value = { default_strategy: 'bm25' }, updated_at = time::now() WHERE key = 'retrieval_strategy';`,
+  `UPSERT evolution_state SET key = 'retrieval_weights', value = { bm25: 0.3, vector: 0.3, strength: 0.4 }, updated_at = time::now() WHERE key = 'retrieval_weights';`,
 ];
 
 /** All schema SQL in execution order */

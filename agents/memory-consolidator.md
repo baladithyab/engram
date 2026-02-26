@@ -25,7 +25,7 @@ description: |
 
 model: inherit
 color: yellow
-tools: ["Read", "Grep", "Glob", "Bash"]
+tools: ["Read", "Grep", "Glob", "Bash", "store_memory", "recall_memories", "promote_memory", "update_memory", "forget_memory", "reflect_and_consolidate", "get_memory_status", "memory_peek"]
 memory: project
 context: fork
 hooks:

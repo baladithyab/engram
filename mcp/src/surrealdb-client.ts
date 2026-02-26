@@ -388,6 +388,7 @@ export class SurrealDBClient {
       }
 
       if (queryEmbedding) {
+        surql += ` AND embedding IS NOT NONE`;
         surql += ` ORDER BY (search::score(1) * ${bm25Weight} + vector::similarity::cosine(embedding, $embedding) * ${vecWeight} + memory_strength * ${strengthWeight}) DESC LIMIT $limit`;
       } else {
         // BM25-only: redistribute vector weight to BM25
@@ -424,7 +425,7 @@ export class SurrealDBClient {
           );
         });
         const evolved = (rows as any[]).flat()[0]?.value;
-        if (evolved?.session !== undefined) scopeWeights = evolved as Record<string, number>;
+        if (evolved?.session !== undefined) scopeWeights = { ...scopeWeights, ...evolved as Record<string, number> };
       } catch {
         // evolution_state not available — use defaults
       }

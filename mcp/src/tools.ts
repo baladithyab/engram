@@ -255,7 +255,7 @@ export function registerMemoryTools(server: McpServer, db: SurrealDBClient): voi
         const maxResults = limit ?? 10;
 
         // Search for matching entities
-        let entityQuery = `SELECT * FROM entity WHERE name CONTAINS $query OR description CONTAINS $query`;
+        let entityQuery = `SELECT * FROM entity WHERE string::lowercase(name) CONTAINS string::lowercase($query) OR string::lowercase(description) CONTAINS string::lowercase($query)`;
         if (entity_type) {
           entityQuery += ` AND entity_type = $entity_type`;
         }

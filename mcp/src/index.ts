@@ -50,21 +50,8 @@ const db = new SurrealDBClient(
   embedder,
 );
 
-registerMemoryTools(server, db);
-registerMemoryResources(server, db);
-registerCodeModeTools(server, db);
-registerSkillTools(server, db);
-registerRecursiveTools(server, db);
-registerEvolutionTools(server, db);
-
 async function main() {
-  await db.connect();
-  await db.initSchema();
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  // Graceful shutdown
+  // Graceful shutdown handlers — register BEFORE transport to catch Ctrl+C during startup
   process.on("SIGINT", async () => {
     await db.close();
     process.exit(0);
@@ -73,6 +60,29 @@ async function main() {
     await db.close();
     process.exit(0);
   });
+
+  await db.connect();
+  await db.initSchema();
+
+  // Preload embedding model to avoid first-use latency
+  if (embedder) {
+    try {
+      await embedder.embed("warmup");
+    } catch {
+      // Non-critical — model will load lazily on first real call
+    }
+  }
+
+  // Register tools AFTER DB is connected
+  registerMemoryTools(server, db);
+  registerMemoryResources(server, db);
+  registerCodeModeTools(server, db);
+  registerSkillTools(server, db);
+  registerRecursiveTools(server, db);
+  registerEvolutionTools(server, db);
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 }
 
 main().catch((err) => {
