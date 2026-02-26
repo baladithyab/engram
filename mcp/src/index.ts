@@ -4,6 +4,8 @@ import { SurrealDBClient, readConfig, generateScopeIds } from "./surrealdb-clien
 import type { DeploymentMode } from "./surrealdb-client.js";
 import { registerMemoryTools } from "./tools.js";
 import { registerMemoryResources } from "./resources.js";
+import { registerRecursiveTools } from "./tools-recursive.js";
+import { registerEvolutionTools } from "./tools-evolution.js";
 
 const server = new McpServer({
   name: "engram",
@@ -31,6 +33,8 @@ const db = new SurrealDBClient(
 
 registerMemoryTools(server, db);
 registerMemoryResources(server, db);
+registerRecursiveTools(server, db);
+registerEvolutionTools(server, db);
 
 async function main() {
   await db.connect();
