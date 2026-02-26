@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ALL_SCHEMA_SQL } from "./schema.js";
+import type { EmbeddingProvider } from "./embeddings/provider.js";
 
 export type DeploymentMode = "embedded" | "local" | "remote" | "memory";
 
@@ -14,6 +15,11 @@ export interface SurrealDBConfig {
   password: string;
   namespace: string;
   database: string;
+  embeddingProvider?: string;
+  embeddingUrl?: string;
+  embeddingModel?: string;
+  embeddingApiKey?: string;
+  embeddingDimensions?: number;
 }
 
 /**
@@ -103,6 +109,21 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
           case "database":
             config.database = value;
             break;
+          case "embedding_provider":
+            config.embeddingProvider = value;
+            break;
+          case "embedding_url":
+            config.embeddingUrl = value;
+            break;
+          case "embedding_model":
+            config.embeddingModel = value;
+            break;
+          case "embedding_api_key":
+            config.embeddingApiKey = value;
+            break;
+          case "embedding_dimensions":
+            config.embeddingDimensions = parseInt(value, 10) || undefined;
+            break;
         }
       }
 
@@ -120,11 +141,13 @@ export class SurrealDBClient {
   private config: SurrealDBConfig;
   private connected = false;
   private scopeIds: ScopeIdentifiers;
+  private embedder: EmbeddingProvider | null;
 
-  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers) {
+  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers, embedder?: EmbeddingProvider) {
     this.config = config;
     this.db = new Surreal();
     this.scopeIds = scopeIds ?? generateScopeIds();
+    this.embedder = embedder ?? null;
   }
 
   async connect(): Promise<void> {
@@ -258,6 +281,16 @@ export class SurrealDBClient {
     importance?: number;
     metadata?: Record<string, unknown>;
   }): Promise<unknown> {
+    // Auto-generate embedding if provider exists and none supplied
+    let embedding = params.embedding ?? null;
+    if (!embedding && this.embedder) {
+      try {
+        embedding = await this.embedder.embed(params.content);
+      } catch {
+        // Embedding generation is non-critical — store without it
+      }
+    }
+
     return this.withScope(params.scope, async () => {
       const [result] = await this.db.query(
         `CREATE memory SET
@@ -277,7 +310,7 @@ export class SurrealDBClient {
           memory_type: params.memoryType,
           scope: params.scope,
           tags: params.tags ?? [],
-          embedding: params.embedding ?? null,
+          embedding,
           importance: params.importance ?? 0.5,
           metadata: params.metadata ?? null,
         }
