@@ -29,27 +29,30 @@ UPSERT t SET key = 'mykey', val = 'x', updated_at = time::now() WHERE key = 'myk
 
 There is no `ON DUPLICATE KEY`. Use `UPSERT ... WHERE` for idempotent inserts.
 
-### VALUE vs COMPUTED — Two Different Things
+### VALUE vs DEFAULT vs Future
 
-SurrealDB 3.0 has TWO ways to derive field values:
+SurrealDB 3.0 has three ways to derive field values:
 
 ```surql
--- VALUE: evaluated at WRITE time, result is STORED on disk
--- Use for fields that should persist and be fast to read
-DEFINE FIELD IF NOT EXISTS strength ON memory VALUE
-  importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at));
+-- DEFAULT: applied when no value is provided on CREATE; accepts user-provided values
+DEFINE FIELD IF NOT EXISTS created_at ON memory TYPE datetime DEFAULT time::now();
 
--- COMPUTED: evaluated at READ time, NEVER stored
--- Use for fields that must always reflect current state
-DEFINE FIELD IF NOT EXISTS age ON person COMPUTED
-  time::year(time::now()) - time::year(born);
+-- VALUE: ALWAYS overrides user-provided values on both CREATE and UPDATE
+-- The result is stored on disk (evaluated at write time)
+DEFINE FIELD IF NOT EXISTS updated_at ON memory TYPE datetime VALUE time::now();
+
+-- VALUE with <future>: evaluated on every READ (query-time, not stored)
+-- Use when the value must always reflect current state
+DEFINE FIELD IF NOT EXISTS strength ON memory VALUE <future> {
+  importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at))
+};
 ```
 
-**Key difference:** `VALUE` runs once when the record is written/updated and stores
-the result. `COMPUTED` runs on every SELECT and is always fresh but uses CPU.
+**Key difference:** `DEFAULT` only fills in missing values. `VALUE` overrides ALL
+values on every write. `VALUE <future> { ... }` recalculates on every read.
 
-**COMPUTED restrictions:** Cannot combine with VALUE, DEFAULT, READONLY, ASSERT,
-REFERENCE, or FLEXIBLE. Cannot be nested or used on ID fields.
+**Our schema uses `VALUE` (not future)** for `memory_strength` — this means the
+decay score is calculated at write time and stored, not recalculated on reads.
 
 ### SCHEMAFULL vs SCHEMALESS
 
@@ -284,7 +287,7 @@ These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
 |-----------|-----------|--------|
 | `SEARCH ANALYZER` | `FULLTEXT ANALYZER` | FTS index definitions |
 | `FLEXIBLE TYPE foo` | `TYPE foo FLEXIBLE` | FLEXIBLE keyword position |
-| `<future> { expr }` in VALUE | `COMPUTED expr` | Futures removed entirely |
+| `FLEXIBLE TYPE foo` (some 2.x) | Position varies — test with your engine | FLEXIBLE position may differ between versions |
 | Optional operator `?` | `.?` | Optional chaining syntax |
 | Fuzzy operators `~`, `?~`, `!~` | `string::similarity::*` functions | Fuzzy matching removed |
 | `type::is::record()` | `type::is_record()` | `::is::` → underscore |
@@ -295,15 +298,16 @@ These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
 
 ### New in 3.0
 
-- `COMPUTED` fields: evaluated on every read, never stored. Cannot combine with VALUE/DEFAULT/READONLY/ASSERT/REFERENCE/FLEXIBLE
-- `DEFINE EVENT ... ASYNC`: runs outside the triggering transaction
-- `$input` parameter in events (replaces `$value`)
+- `FULLTEXT ANALYZER` replaces `SEARCH ANALYZER` for FTS indexes
+- `@AND@` and `@OR@` operators inside full-text matches
 - `search::rrf()`: Reciprocal Rank Fusion for combining FTS + vector scores
 - `search::linear()`: linear combination of search scores
 - `search::offsets()`: token offset positions in matches
-- `@@ matches` operator now supports `AND` / `OR` inside full-text matches
 - `DEFINE TABLE ... TYPE NORMAL | RELATION | ANY`
 - `DEFINE FIELD ... REFERENCE ON DELETE REJECT | CASCADE`
+- `DEFAULT ALWAYS`: re-applies default on UPDATE if value is NONE (since v2.2.0)
+- `CONCURRENTLY` clause for non-blocking index builds
+- `REBUILD INDEX` to rebuild indexes without dropping them
 
 ## Anti-Patterns
 
@@ -315,10 +319,10 @@ These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
 - Do NOT assume `NULL` — SurrealDB uses `NONE` for absent values
 - Do NOT use `SEARCH ANALYZER` — use `FULLTEXT ANALYZER` (changed in SurrealDB 3.0)
 - Do NOT use `FLEXIBLE TYPE` — use `TYPE ... FLEXIBLE` (FLEXIBLE goes after TYPE in 3.0)
-- Do NOT use futures `<future> { ... }` — removed in 3.0, use `COMPUTED` instead
 - Do NOT use `?` for optional — use `.?` in 3.0
 - Do NOT use fuzzy operators (`~`, `?~`, `!~`) — use `string::similarity::*` functions
 - Do NOT use `::is::` function names — use underscore: `type::is_record()` not `type::is::record()`
 - Do NOT call `signin()` in embedded mode — surrealkv:// runs in-process with full access
 - Do NOT write to undeclared fields on `SCHEMAFULL` tables — they will error at runtime
-- Do NOT combine `COMPUTED` with VALUE, DEFAULT, READONLY, ASSERT, REFERENCE, or FLEXIBLE
+- Do NOT use `VALUE` and `DEFAULT` on the same field — VALUE always overrides, making DEFAULT pointless
+- Event parameters are `$before`, `$after`, `$value`, `$event` — there is no `$input` parameter

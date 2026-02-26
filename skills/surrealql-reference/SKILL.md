@@ -61,21 +61,27 @@ SELECT ->knows->person->knows->person FROM person:tobie;
 SELECT <->sister_city<->city FROM city:calgary;
 ```
 
-### 4. COMPUTED vs VALUE vs DEFAULT
+### 4. DEFAULT vs VALUE vs VALUE with Future
 Three different ways to derive data:
 
 ```surql
--- DEFAULT: runs once at write time, stored
+-- DEFAULT: applied when no value is provided on CREATE; user values are accepted
 DEFINE FIELD created_at ON memory TYPE datetime DEFAULT time::now();
 
--- VALUE: runs at write time (alias for Future), stored
-DEFINE FIELD slug ON article TYPE string VALUE string::slug(title);
+-- DEFAULT ALWAYS: re-applies default on UPDATE if value is NONE (since v2.2.0)
+DEFINE FIELD primary ON product TYPE number DEFAULT ALWAYS 123.456;
 
--- COMPUTED: runs every read, NOT stored (v3.0 preferred)
-DEFINE FIELD age ON person COMPUTED time::year(time::now()) - time::year(born);
+-- VALUE: ALWAYS overrides user-provided values on CREATE and UPDATE; stored on disk
+DEFINE FIELD slug ON article TYPE string VALUE string::slug(title);
+DEFINE FIELD updated_at ON memory TYPE datetime VALUE time::now();
+
+-- VALUE <future>: recalculated on every READ (query-time, NOT stored)
+DEFINE FIELD age ON person VALUE <future> { time::year(time::now()) - time::year(born) };
 ```
 
-**Gotcha:** You cannot mix `COMPUTED` with `VALUE`, `DEFAULT`, `READONLY`, `ASSERT`, `REFERENCE`, or `FLEXIBLE`.
+**Gotcha:** `VALUE` overrides everything — if you define `VALUE time::now()`, users
+cannot set the field to anything else. Use `DEFAULT` if you want user values accepted.
+**Gotcha:** Fields with `VALUE` are evaluated in alphabetical order by field name.
 
 ### 5. Record Links vs RELATE vs REFERENCE
 Three ways to model relationships:
@@ -90,7 +96,7 @@ RELATE user:alice->purchased->product:laptop SET quantity = 2, price = 999.99;
 
 -- REFERENCE (bidirectional with cascade rules)
 DEFINE FIELD author ON article TYPE record<user> REFERENCE ON DELETE CASCADE;
--- Now user can use: DEFINE FIELD articles ON user COMPUTED <~article;
+-- Now user can use REFERENCES to find incoming links: SELECT <~article FROM user:alice;
 ```
 
 ### 6. SPLIT vs GROUP BY
@@ -208,14 +214,15 @@ DEFINE TABLE purchased TYPE RELATION FROM user TO product SCHEMAFULL;
 ### DEFINE FIELD Syntax
 
 ```surql
-DEFINE FIELD [IF NOT EXISTS | OVERWRITE] @field ON TABLE @table
-  TYPE @type
-  [DEFAULT @value | VALUE @expression | COMPUTED @expression]
-  [ASSERT @validation]
-  [READONLY]
-  [FLEXIBLE]
+DEFINE FIELD [IF NOT EXISTS | OVERWRITE] @field ON [TABLE] @table
+  [[FLEXIBLE] TYPE @type]
   [REFERENCE [ON DELETE CASCADE|REJECT|IGNORE|UNSET|THEN @expr]]
+  [DEFAULT [ALWAYS] @expression]
+  [READONLY]
+  [VALUE @expression]
+  [ASSERT @expression]
   [PERMISSIONS ...]
+  [COMMENT @string]
   ;
 ```
 
@@ -226,11 +233,11 @@ DEFINE FIELD tags ON memory TYPE array<string> DEFAULT [];
 DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
 DEFINE FIELD memory_type ON memory TYPE string ASSERT $value IN ['episodic', 'semantic', 'procedural', 'working'];
 DEFINE FIELD embedding ON memory TYPE option<array<float>>;
-DEFINE FIELD metadata ON memory TYPE option<object> FLEXIBLE;
+DEFINE FIELD metadata ON memory FLEXIBLE TYPE object;
 DEFINE FIELD author ON book TYPE record<person> REFERENCE ON DELETE CASCADE;
 
--- Computed field (not stored, evaluated on read)
-DEFINE FIELD memory_strength ON memory COMPUTED
+-- VALUE field (evaluated on every write, stored on disk)
+DEFINE FIELD memory_strength ON memory VALUE
   importance * math::pow(
     IF memory_type = 'procedural' THEN 0.999
     ELSE IF memory_type = 'semantic' THEN 0.995
@@ -582,9 +589,9 @@ SELECT * FROM person WHERE email IS NONE;
 -- NULL: field exists but is explicitly null
 SELECT * FROM person WHERE email IS NULL;
 
--- Useful in computed fields
-DEFINE FIELD full_name ON person COMPUTED
-  (first_name ?? '') + ' ' + (last_name ?? '');  -- coalesce
+-- Useful in VALUE fields with coalescing
+DEFINE FIELD full_name ON person VALUE
+  (first_name ?? '') + ' ' + (last_name ?? '');
 ```
 
 ---
@@ -608,8 +615,8 @@ DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
 DEFINE FIELD status ON memory TYPE string DEFAULT 'active'
   ASSERT $value IN ['active', 'consolidated', 'archived', 'forgotten'];
 
--- 3. Computed field: exponential decay with type-specific half-lives
-DEFINE FIELD memory_strength ON memory COMPUTED
+-- 3. VALUE field: exponential decay with type-specific half-lives (stored on write)
+DEFINE FIELD memory_strength ON memory VALUE
   importance * math::pow(
     IF memory_type = 'procedural' THEN 0.999
     ELSE IF memory_type = 'semantic' THEN 0.995
@@ -665,8 +672,8 @@ WHERE key = 'decay_half_lives';
 | `TRIGGER` | `DEFINE EVENT ... THEN` | Similar concept, different syntax |
 | `AUTO_INCREMENT` | `:ulid()` or `:rand()` | Multiple ID generation strategies |
 | `CHECK constraint` | `ASSERT` | Validation on field definition |
-| `COMPUTED column` | `COMPUTED` (v3.0) | Calculated on read, not stored |
 | `GENERATED column` | `VALUE` | Calculated on write, stored |
+| `Virtual/computed column` | `VALUE <future> { expr }` | Calculated on read, not stored |
 | `DEFAULT NOW()` | `DEFAULT time::now()` | Function call, not constant |
 | `SEARCH ... MATCH` | `@N@ operator` with `search::score()` | Full-text via operators |
 | `Array operations` | `SPLIT` | Flatten array to rows |
