@@ -383,7 +383,7 @@ IF array::len($candidates) > 0 {
   -- Merge: update existing memory with new information
   UPDATE $candidates[0].id SET
     access_count += $source.access_count,
-    importance = math::max(importance, $source.importance),
+    importance = math::max([importance, $source.importance]),
     tags = array::union(tags, $source.tags),
     updated_at = time::now(),
     metadata.merged_from += [$source.id]
@@ -418,8 +418,8 @@ DEFINE FUNCTION IF NOT EXISTS fn::calculate_importance(
 ) {
   LET $m = (SELECT * FROM ONLY $memory_id);
 
-  LET $recency = math::exp(-0.1 * duration::days(time::now() - $m.updated_at));
-  LET $frequency = math::min(1.0, $m.access_count / 10.0);
+  LET $recency = math::pow(math::e, -0.1 * duration::days(time::now() - $m.updated_at));
+  LET $frequency = math::min([1.0, $m.access_count / 10.0]);
 
   -- Weighted combination
   LET $score = (
@@ -436,7 +436,7 @@ DEFINE FUNCTION IF NOT EXISTS fn::calculate_importance(
     ELSE IF $m.memory_type = 'semantic' { 0.05 }
     ELSE { 0.0 };
 
-  RETURN math::min(1.0, $score + $type_bonus);
+  RETURN math::min([1.0, $score + $type_bonus]);
 };
 ```
 
@@ -471,7 +471,7 @@ DEFINE FIELD IF NOT EXISTS memory_strength ON memory COMPUTED {
   -- Each access extends effective half-life by 20%
   LET $effective_half_life = $half_life * (1.0 + access_count * 0.2);
   LET $days_elapsed = duration::days(time::now() - last_accessed_at);
-  LET $decay = math::exp(-0.693 * $days_elapsed / $effective_half_life);
+  LET $decay = math::pow(math::e, -0.693 * $days_elapsed / $effective_half_life);
 
   RETURN $base * $decay;
 };
@@ -506,7 +506,7 @@ DEFINE FUNCTION IF NOT EXISTS fn::strengthen_on_access(
     last_accessed_at = time::now(),
     updated_at = time::now(),
     -- Boost relevance score slightly (capped at 1.0)
-    relevance_score = math::min(1.0, relevance_score + 0.05)
+    relevance_score = math::min([1.0, relevance_score + 0.05])
   ;
 };
 ```

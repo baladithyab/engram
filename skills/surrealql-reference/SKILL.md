@@ -61,7 +61,7 @@ SELECT ->knows->person->knows->person FROM person:tobie;
 SELECT <->sister_city<->city FROM city:calgary;
 ```
 
-### 4. DEFAULT vs VALUE vs VALUE with Future
+### 4. DEFAULT vs VALUE vs COMPUTED
 Three different ways to derive data:
 
 ```surql
@@ -75,13 +75,15 @@ DEFINE FIELD primary ON product TYPE number DEFAULT ALWAYS 123.456;
 DEFINE FIELD slug ON article TYPE string VALUE string::slug(title);
 DEFINE FIELD updated_at ON memory TYPE datetime VALUE time::now();
 
--- VALUE <future>: recalculated on every READ (query-time, NOT stored)
-DEFINE FIELD age ON person VALUE <future> { time::year(time::now()) - time::year(born) };
+-- COMPUTED: recalculated on every READ (query-time, NOT stored)
+-- Replaces VALUE <future> { ... } which was removed in 3.0
+DEFINE FIELD age ON person COMPUTED time::year(time::now()) - time::year(born);
 ```
 
 **Gotcha:** `VALUE` overrides everything — if you define `VALUE time::now()`, users
 cannot set the field to anything else. Use `DEFAULT` if you want user values accepted.
 **Gotcha:** Fields with `VALUE` are evaluated in alphabetical order by field name.
+**Gotcha:** `<future>` was completely removed in 3.0. Use `COMPUTED` instead.
 
 ### 5. Record Links vs RELATE vs REFERENCE
 Three ways to model relationships:
@@ -94,9 +96,10 @@ SELECT author.name FROM book;  -- author's name resolved automatically
 -- RELATE (explicit edge with properties)
 RELATE user:alice->purchased->product:laptop SET quantity = 2, price = 999.99;
 
--- REFERENCE (bidirectional with cascade rules)
+-- REFERENCE (bidirectional with cascade rules — stabilized in 3.0, experimental since v2.2.0)
 DEFINE FIELD author ON article TYPE record<user> REFERENCE ON DELETE CASCADE;
 -- Now user can use REFERENCES to find incoming links: SELECT <~article FROM user:alice;
+-- NOTE: Record references may require --allow-experimental record_references on older builds
 ```
 
 ### 6. SPLIT vs GROUP BY
@@ -168,7 +171,7 @@ UPSERT evolution_state SET key = 'decay_rates', value = { episodic: 1.0 }, updat
   WHERE key = 'decay_rates';
 ```
 
-**Gotcha:** UPSERT in SurrealDB doesn't have `WHERE` conditions in the standard syntax. For conditional upsert-with-where, build logic in a DEFINE FUNCTION or use subqueries.
+**Gotcha:** UPSERT supports `WHERE` conditions — use them for conditional matching (e.g., `UPSERT ... SET ... WHERE key = 'x'`). The full syntax also supports `CONTENT`, `MERGE`, `PATCH`, `REPLACE`, `UNSET`, `TIMEOUT`, `PARALLEL`, and `EXPLAIN`.
 
 ### CREATE Syntax
 
@@ -203,7 +206,9 @@ RELATE [ONLY] @from -> @edge_table -> @to
 RELATE user:alice->purchased->product:laptop SET quantity = 2;
 RELATE person:one->wrote->[blog:1, book:1, comment:1];  -- multiple targets
 LET $devs = (SELECT * FROM user WHERE tags CONTAINS 'developer');
-RELATE company:acme->employs->$devs UNIQUE;
+RELATE company:acme->employs->$devs;
+-- For unique edges, use a separate index (UNIQUE is NOT a RELATE keyword):
+-- DEFINE INDEX unique_employs ON employs FIELDS in, out UNIQUE;
 ```
 
 **Edge table must be TYPE RELATION:**
@@ -215,7 +220,8 @@ DEFINE TABLE purchased TYPE RELATION FROM user TO product SCHEMAFULL;
 
 ```surql
 DEFINE FIELD [IF NOT EXISTS | OVERWRITE] @field ON [TABLE] @table
-  [[FLEXIBLE] TYPE @type]
+  [TYPE @type [FLEXIBLE]]
+  [COMPUTED @expression]
   [REFERENCE [ON DELETE CASCADE|REJECT|IGNORE|UNSET|THEN @expr]]
   [DEFAULT [ALWAYS] @expression]
   [READONLY]
@@ -226,6 +232,8 @@ DEFINE FIELD [IF NOT EXISTS | OVERWRITE] @field ON [TABLE] @table
   ;
 ```
 
+Note: Both `FLEXIBLE TYPE object` and `TYPE object FLEXIBLE` are accepted in 3.0 docs.
+
 **Type examples:**
 ```surql
 DEFINE FIELD name ON memory TYPE string;
@@ -233,8 +241,11 @@ DEFINE FIELD tags ON memory TYPE array<string> DEFAULT [];
 DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
 DEFINE FIELD memory_type ON memory TYPE string ASSERT $value IN ['episodic', 'semantic', 'procedural', 'working'];
 DEFINE FIELD embedding ON memory TYPE option<array<float>>;
-DEFINE FIELD metadata ON memory FLEXIBLE TYPE object;
+DEFINE FIELD metadata ON memory TYPE object FLEXIBLE;  -- both positions accepted in 3.0
 DEFINE FIELD author ON book TYPE record<person> REFERENCE ON DELETE CASCADE;
+
+-- COMPUTED field (evaluated on every read, NOT stored — replaces <future> in 3.0)
+DEFINE FIELD age ON person COMPUTED time::year(time::now()) - time::year(born);
 
 -- VALUE field (evaluated on every write, stored on disk)
 DEFINE FIELD memory_strength ON memory VALUE
@@ -257,7 +268,7 @@ DEFINE FIELD updated_at ON memory TYPE datetime VALUE time::now();
 DEFINE INDEX [IF NOT EXISTS] @name ON TABLE @table
   FIELDS @field [, ...]
   [UNIQUE]
-  [FULLTEXT ANALYZER @analyzer BM25 [HIGHLIGHTS]]
+  [FULLTEXT ANALYZER @analyzer BM25[(@k1, @b)] [HIGHLIGHTS]]
   [HNSW DIMENSION @dim DIST @distance [@params]]
   [CONCURRENTLY]
   ;
@@ -329,10 +340,13 @@ DEFINE EVENT memory_decay_check ON memory WHEN $after.status = 'active' THEN {
 
 ```surql
 DEFINE TABLE [IF NOT EXISTS | OVERWRITE] @table
+  [DROP]
   [SCHEMAFULL | SCHEMALESS]
-  [TYPE [NORMAL | RELATION FROM @from TO @to] | DROP]
+  [TYPE [ANY | NORMAL | RELATION [IN|FROM] @table [OUT|TO] @table [ENFORCED]]]
+  [AS SELECT @projections FROM @tables ...]
+  [CHANGEFEED @duration [INCLUDE ORIGINAL]]
   [PERMISSIONS ...]
-  [CHANGEFEED @duration]
+  [COMMENT @string]
   ;
 
 -- Examples
@@ -352,8 +366,10 @@ DEFINE TABLE monthly_sales AS
 **Type options:**
 - `SCHEMAFULL` (default for typed): fields must be defined
 - `SCHEMALESS`: flexible schema
-- `TYPE RELATION FROM X TO Y`: edge table (no records, just edges)
-- `DROP`: accepts writes but discards data (useful for events)
+- `TYPE ANY`: accepts both normal records and relation edges (default if no TYPE specified)
+- `TYPE NORMAL`: only normal records, no edges
+- `TYPE RELATION [IN|FROM] X [OUT|TO] Y [ENFORCED]`: edge table for graph relationships
+- `DROP`: accepts writes but discards data (useful for events-only tables)
 
 ### DEFINE ANALYZER Syntax
 
@@ -380,7 +396,8 @@ DEFINE ANALYZER html_search
 ```
 
 **Tokenizers:** `blank`, `camel`, `class`, `punct`
-**Filters:** `ascii`, `lowercase`, `uppercase`, `snowball(lang)`, `edgengram(min,max)`, `ngram(min,max)`
+**Filters:** `ascii`, `lowercase`, `uppercase`, `snowball(lang)`, `edgengram(min,max)`, `ngram(min,max)`, `mapper(path)`
+**Preprocessing:** `FUNCTION fn::@preprocessor` clause allows custom preprocessing before tokenization
 
 ---
 
@@ -404,19 +421,23 @@ SELECT * FROM memory WHERE tags CONTAINSALL ["high_priority", "semantic"];
 SELECT * FROM user WHERE "viewer" IN roles;
 ```
 
-### Fuzzy Matching
+### Array Equality Operators
 
 | Operator | Description |
 |----------|-------------|
-| `?=` | Any value in set equals (fuzzy) |
+| `?=` | Any value in set equals |
 | `*=` | All values in set equal |
-| `~` | Fuzzy match (all) |
-| `?~` | Fuzzy match (any) |
-| `*~` | Fuzzy match (all) |
 
 ```surql
 UPSERT person:test SET sport +?= 'tennis' RETURN sport;
 ```
+
+**Fuzzy matching:** The `~` operator still works for basic fuzzy comparison (`"SurrealDB" ~ "db"`),
+but `?~` and `*~` were removed in 3.0. For similarity scoring, use:
+- `string::similarity::fuzzy(a, b)` — general fuzzy similarity score
+- `string::similarity::jaro(a, b)` — Jaro similarity
+- `string::similarity::jaro_winkler(a, b)` — Jaro-Winkler similarity
+- `string::similarity::smithwaterman(a, b)` — Smith-Waterman alignment
 
 ### Full-Text Search
 ```surql
@@ -441,10 +462,11 @@ WHERE embedding <|8,COSINE|> $query_vector
 -- Similarity (returns 0-1, 1 = identical)
 vector::similarity::cosine([1, 2], [2, 4]);  -- 1.0 (parallel)
 
--- Distance
+-- Distance (note: there is NO vector::distance::cosine — use vector::similarity::cosine instead)
 vector::distance::euclidean([0, 0], [3, 4]);  -- 5
-vector::distance::cosine([1, 0], [0, 1]);
 vector::distance::manhattan([0, 0], [3, 4]);  -- 7
+vector::distance::hamming([1, 0, 1], [1, 1, 0]);
+vector::distance::chebyshev([0, 0], [3, 4]);
 
 -- Element-wise
 vector::add([1, 2], [3, 4]);  -- [4, 6]
@@ -473,8 +495,10 @@ array::union([1, 2], [2, 3]);      -- [1, 2, 3]
 array::intersect([1,2,3], [2,3,4]); -- [2, 3]
 array::complement([1,2,3], [2]);     -- [1, 3]
 
--- Aggregation
-array::fold([1,2,3,4,5], 0, |$acc, $val| $acc + $val);  -- 15
+-- Filtering/mapping with closures
+array::filter([1,2,3,4,5], |$v| $v > 2);  -- [3, 4, 5]
+array::map([1,2,3], |$v| $v * 2);         -- [2, 4, 6]
+-- NOTE: array::fold does NOT exist; use math::sum() for aggregation
 
 -- Boolean
 array::all([true, true]);
@@ -526,7 +550,7 @@ importance - (hours_since_access * decay_factor);
 `FLEXIBLE` on an object field allows any keys, not stricter checking:
 
 ```surql
--- Allows any object, not just specific keys
+-- Allows any object, not just specific keys (both positions accepted in 3.0)
 DEFINE FIELD metadata ON memory TYPE option<object> FLEXIBLE;
 
 -- Without FLEXIBLE, only defined fields allowed in SCHEMAFULL table
@@ -673,7 +697,7 @@ WHERE key = 'decay_half_lives';
 | `AUTO_INCREMENT` | `:ulid()` or `:rand()` | Multiple ID generation strategies |
 | `CHECK constraint` | `ASSERT` | Validation on field definition |
 | `GENERATED column` | `VALUE` | Calculated on write, stored |
-| `Virtual/computed column` | `VALUE <future> { expr }` | Calculated on read, not stored |
+| `Virtual/computed column` | `COMPUTED expr` | Calculated on read, not stored (3.0; replaces `<future>`) |
 | `DEFAULT NOW()` | `DEFAULT time::now()` | Function call, not constant |
 | `SEARCH ... MATCH` | `@N@ operator` with `search::score()` | Full-text via operators |
 | `Array operations` | `SPLIT` | Flatten array to rows |

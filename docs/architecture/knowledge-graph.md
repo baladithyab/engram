@@ -346,9 +346,9 @@ ORDER BY mention_count DESC;
 SELECT
     name,
     entity_type,
-    count(->relates_to) AS outgoing_count,
-    count(<-relates_to) AS incoming_count,
-    count(->relates_to) + count(<-relates_to) AS total_connections
+    array::len(->relates_to) AS outgoing_count,
+    array::len(<-relates_to) AS incoming_count,
+    array::len(->relates_to) + array::len(<-relates_to) AS total_connections
 FROM entity
 ORDER BY total_connections DESC
 LIMIT 10;

@@ -29,7 +29,7 @@ UPSERT t SET key = 'mykey', val = 'x', updated_at = time::now() WHERE key = 'myk
 
 There is no `ON DUPLICATE KEY`. Use `UPSERT ... WHERE` for idempotent inserts.
 
-### VALUE vs DEFAULT vs Future
+### VALUE vs DEFAULT vs COMPUTED
 
 SurrealDB 3.0 has three ways to derive field values:
 
@@ -41,17 +41,16 @@ DEFINE FIELD IF NOT EXISTS created_at ON memory TYPE datetime DEFAULT time::now(
 -- The result is stored on disk (evaluated at write time)
 DEFINE FIELD IF NOT EXISTS updated_at ON memory TYPE datetime VALUE time::now();
 
--- VALUE with <future>: evaluated on every READ (query-time, not stored)
--- Use when the value must always reflect current state
-DEFINE FIELD IF NOT EXISTS strength ON memory VALUE <future> {
-  importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at))
-};
+-- COMPUTED: evaluated on every READ (query-time, not stored)
+-- Replaces <future> which was removed in 3.0
+DEFINE FIELD IF NOT EXISTS strength ON memory COMPUTED
+  importance * math::pow(0.999, duration::hours(time::now() - last_accessed_at));
 ```
 
 **Key difference:** `DEFAULT` only fills in missing values. `VALUE` overrides ALL
-values on every write. `VALUE <future> { ... }` recalculates on every read.
+values on every write. `COMPUTED` recalculates on every read (not stored on disk).
 
-**Our schema uses `VALUE` (not future)** for `memory_strength` — this means the
+**Our schema uses `VALUE` (not COMPUTED)** for `memory_strength` — this means the
 decay score is calculated at write time and stored, not recalculated on reads.
 
 ### SCHEMAFULL vs SCHEMALESS
@@ -161,8 +160,11 @@ ORDER BY (search::score(1) * 0.3 + vector::similarity::cosine(embedding, $embedd
 LIMIT $limit;
 
 -- Option 2: search::rrf() — Reciprocal Rank Fusion (new in 3.0)
--- Combines multiple ranked result lists automatically
--- search::rrf(score1, score2, ...) returns a fused relevance score
+-- Signature: search::rrf($lists: array, $limit: int, $k: option<int>) -> array<object>
+-- Takes arrays of pre-sorted result sets, NOT individual scores
+-- LET $vs = SELECT id FROM memory WHERE embedding <|10,100|> $qvec;
+-- LET $ft = SELECT id, search::score(1) AS score FROM memory WHERE content @1@ $query ORDER BY score DESC LIMIT 10;
+-- RETURN search::rrf([$vs, $ft], 10, 60);
 ```
 
 New search functions in 3.0:
@@ -252,10 +254,10 @@ duration::days(time::now() - created_at)
 ### Math Operations
 
 ```surql
-math::pow(0.999, 24)       -- exponentiation
-math::exp(-0.693 * x)      -- natural exponential
-math::min(1.0, x + 0.1)    -- clamping
-math::max(importance, 0.1)  -- floor
+math::pow(0.999, 24)              -- exponentiation
+math::pow(math::e, -0.693 * x)   -- natural exponential (math::exp does NOT exist)
+math::min([1.0, x + 0.1])        -- clamping (takes array, not two scalars)
+math::max([importance, 0.1])      -- floor (takes array, not two scalars)
 ```
 
 ### Aggregation
@@ -286,25 +288,29 @@ These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
 | Old (2.x) | New (3.0) | Impact |
 |-----------|-----------|--------|
 | `SEARCH ANALYZER` | `FULLTEXT ANALYZER` | FTS index definitions |
-| `FLEXIBLE TYPE foo` | `TYPE foo FLEXIBLE` | FLEXIBLE keyword position |
-| `FLEXIBLE TYPE foo` (some 2.x) | Position varies — test with your engine | FLEXIBLE position may differ between versions |
+| `VALUE <future> { expr }` | `COMPUTED expr` | Query-time computed fields |
 | Optional operator `?` | `.?` | Optional chaining syntax |
-| Fuzzy operators `~`, `?~`, `!~` | `string::similarity::*` functions | Fuzzy matching removed |
-| `type::is::record()` | `type::is_record()` | `::is::` → underscore |
-| `string::is::hexadecimal()` | `string::is_hexadecimal()` | Same pattern |
-| HTTP headers unprefixed | `surreal-` prefix required | API clients |
-| Default bind `0.0.0.0` | `127.0.0.1` | CLI/embedded |
-| `--auth` CLI flag | `--unauthenticated` (auth on by default) | CLI scripts |
+| `type::is::record()` | `type::is_record()` | `type::is::*` → underscore |
+| Fuzzy operators `?~`, `*~` | `string::similarity::*` functions | Removed in 3.0 |
+| Ranges `1..5` inclusive | `1..5` exclusive, `1..=5` inclusive | Upper bound now exclusive |
+
+**Note:** `FLEXIBLE TYPE object` and `TYPE object FLEXIBLE` — both positions accepted in 3.0 docs.
+The `~` operator (basic fuzzy match) still works but `?~` and `*~` are removed.
+`string::is::*` functions were NOT renamed (only `type::is::*` was).
+
+**2.0 changes (still apply, but NOT new in 3.0):** HTTP `surreal-` header prefix,
+default bind `127.0.0.1`, `--unauthenticated` flag replacing `--auth`.
 
 ### New in 3.0
 
+- `COMPUTED expr` replaces `VALUE <future> { expr }` for query-time calculated fields
 - `FULLTEXT ANALYZER` replaces `SEARCH ANALYZER` for FTS indexes
 - `@AND@` and `@OR@` operators inside full-text matches
 - `search::rrf()`: Reciprocal Rank Fusion for combining FTS + vector scores
-- `search::linear()`: linear combination of search scores
+- `search::linear()`: linear weighted combination of search scores
 - `search::offsets()`: token offset positions in matches
 - `DEFINE TABLE ... TYPE NORMAL | RELATION | ANY`
-- `DEFINE FIELD ... REFERENCE ON DELETE REJECT | CASCADE`
+- `DEFINE FIELD ... REFERENCE ON DELETE REJECT | CASCADE` (stabilized; experimental since v2.2.0)
 - `DEFAULT ALWAYS`: re-applies default on UPDATE if value is NONE (since v2.2.0)
 - `CONCURRENTLY` clause for non-blocking index builds
 - `REBUILD INDEX` to rebuild indexes without dropping them
@@ -318,10 +324,13 @@ These are the changes from 2.x → 3.0 that WILL cause errors if not addressed:
 - Do NOT use `IF EXISTS` for drops — use `REMOVE TABLE IF EXISTS`
 - Do NOT assume `NULL` — SurrealDB uses `NONE` for absent values
 - Do NOT use `SEARCH ANALYZER` — use `FULLTEXT ANALYZER` (changed in SurrealDB 3.0)
-- Do NOT use `FLEXIBLE TYPE` — use `TYPE ... FLEXIBLE` (FLEXIBLE goes after TYPE in 3.0)
-- Do NOT use `?` for optional — use `.?` in 3.0
-- Do NOT use fuzzy operators (`~`, `?~`, `!~`) — use `string::similarity::*` functions
-- Do NOT use `::is::` function names — use underscore: `type::is_record()` not `type::is::record()`
+- Do NOT use `VALUE <future> { ... }` — use `COMPUTED expr` (futures removed in 3.0)
+- Do NOT use `?` for optional chaining — use `.?` in 3.0
+- Do NOT use `?~` or `*~` fuzzy operators — removed in 3.0; use `string::similarity::*` functions
+- Do NOT use `type::is::record()` — renamed to `type::is_record()` in 3.0 (but `string::is::*` was NOT renamed)
+- Do NOT use `math::exp()` — it does not exist; use `math::pow(math::e, x)` instead
+- Do NOT use `math::min(a, b)` with two scalars — use `math::min([a, b])` (takes array)
+- Do NOT use `RELATE ... UNIQUE` — UNIQUE is not a RELATE keyword; use `DEFINE INDEX ... UNIQUE` on the edge table
 - Do NOT call `signin()` in embedded mode — surrealkv:// runs in-process with full access
 - Do NOT write to undeclared fields on `SCHEMAFULL` tables — they will error at runtime
 - Do NOT use `VALUE` and `DEFAULT` on the same field — VALUE always overrides, making DEFAULT pointless
