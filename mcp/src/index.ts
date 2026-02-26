@@ -8,6 +8,8 @@ import { createEmbeddingProvider } from "./embeddings/index.js";
 import type { EmbeddingProvider } from "./embeddings/provider.js";
 import { registerCodeModeTools } from "./tools-codemode.js";
 import { registerSkillTools } from "./tools-skills.js";
+import { registerRecursiveTools } from "./tools-recursive.js";
+import { registerEvolutionTools } from "./tools-evolution.js";
 
 const server = new McpServer({
   name: "engram",
@@ -52,6 +54,8 @@ registerMemoryTools(server, db);
 registerMemoryResources(server, db);
 registerCodeModeTools(server, db);
 registerSkillTools(server, db);
+registerRecursiveTools(server, db);
+registerEvolutionTools(server, db);
 
 async function main() {
   await db.connect();
