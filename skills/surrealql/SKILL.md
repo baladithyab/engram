@@ -46,11 +46,11 @@ DEFINE TABLE IF NOT EXISTS memory SCHEMAFULL;   -- strict: only defined fields a
 DEFINE TABLE IF NOT EXISTS scratch SCHEMALESS;   -- flexible: any fields allowed
 ```
 
-Use `SCHEMAFULL` for core tables. Use `FLEXIBLE TYPE` for individual fields that need
+Use `SCHEMAFULL` for core tables. Use `TYPE ... FLEXIBLE` for individual fields that need
 to accept arbitrary data within a SCHEMAFULL table:
 
 ```surql
-DEFINE FIELD IF NOT EXISTS metadata ON memory FLEXIBLE TYPE option<object>;
+DEFINE FIELD IF NOT EXISTS metadata ON memory TYPE option<object> FLEXIBLE;
 ```
 
 ### Graph Relations use TYPE RELATION
@@ -89,15 +89,18 @@ Security validators must strip backtick content before checking for blocked keyw
 
 ## BM25 Full-Text Search
 
+**SurrealDB 3.0 breaking change:** The keyword is `FULLTEXT ANALYZER`, not `SEARCH ANALYZER`.
+The old `SEARCH ANALYZER` syntax was used in SurrealDB 2.x and will cause parse errors in 3.0.
+
 ```surql
 -- Define analyzer
 DEFINE ANALYZER IF NOT EXISTS memory_analyzer
   TOKENIZERS blank, class
   FILTERS ascii, lowercase, snowball(english);
 
--- Define search index
+-- Define search index (FULLTEXT, not SEARCH — SurrealDB 3.0+)
 DEFINE INDEX IF NOT EXISTS memory_content_search ON memory
-  FIELDS content SEARCH ANALYZER memory_analyzer BM25;
+  FIELDS content FULLTEXT ANALYZER memory_analyzer BM25;
 
 -- Query with score
 SELECT *, search::score(1) AS relevance
@@ -257,3 +260,7 @@ SELECT count() FROM memory GROUP ALL;
 - Do NOT use `LIMIT offset, count` — use `LIMIT count START offset`
 - Do NOT use `IF EXISTS` for drops — use `REMOVE TABLE IF EXISTS`
 - Do NOT assume `NULL` — SurrealDB uses `NONE` for absent values
+- Do NOT use `SEARCH ANALYZER` — use `FULLTEXT ANALYZER` (changed in SurrealDB 3.0)
+- Do NOT use `FLEXIBLE TYPE` — use `TYPE ... FLEXIBLE` (FLEXIBLE goes after TYPE in 3.0)
+- Do NOT call `signin()` in embedded mode — surrealkv:// runs in-process with full access
+- Do NOT write to undeclared fields on `SCHEMAFULL` tables — they will error at runtime
