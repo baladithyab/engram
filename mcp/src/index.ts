@@ -32,8 +32,8 @@ try {
     apiKey: process.env.EMBEDDING_API_KEY ?? fileConfig.embeddingApiKey,
     dimensions: fileConfig.embeddingDimensions,
   });
-} catch {
-  // Embedding provider initialization failed — continue without embeddings
+} catch (err) {
+  console.error("Embedding provider init failed, continuing without embeddings:", err);
 }
 
 const db = new SurrealDBClient(

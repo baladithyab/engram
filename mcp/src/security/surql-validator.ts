@@ -80,6 +80,21 @@ function stripCommentsAndStrings(surql: string): string {
       continue;
     }
 
+    // Backtick-quoted identifier (SurrealDB supports these)
+    if (surql[i] === "`") {
+      i++; // skip opening backtick
+      while (i < surql.length && surql[i] !== "`") {
+        if (surql[i] === "\\" && i + 1 < surql.length) {
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      i++; // skip closing backtick
+      result += "``";
+      continue;
+    }
+
     result += surql[i];
     i++;
   }

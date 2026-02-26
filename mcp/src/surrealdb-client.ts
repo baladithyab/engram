@@ -286,8 +286,8 @@ export class SurrealDBClient {
     if (!embedding && this.embedder) {
       try {
         embedding = await this.embedder.embed(params.content);
-      } catch {
-        // Embedding generation is non-critical — store without it
+      } catch (err) {
+        console.error("Embedding generation failed, storing without embedding:", err);
       }
     }
 
