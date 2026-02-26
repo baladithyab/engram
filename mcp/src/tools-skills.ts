@@ -189,11 +189,7 @@ export function registerSkillTools(server: McpServer, db: SurrealDBClient): void
           was_useful,
         };
 
-        let surql = `UPDATE $id SET was_useful = $was_useful, updated_at = time::now()`;
-        if (reason !== undefined) {
-          surql += `, metadata.feedback_reason = $reason`;
-          vars.reason = reason;
-        }
+        const surql = `UPDATE $id SET was_useful = $was_useful`;
 
         await db.queryInScope("project", surql, vars);
 
