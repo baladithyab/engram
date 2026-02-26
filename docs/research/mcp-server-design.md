@@ -310,7 +310,7 @@ Return connection health and memory statistics.
   "connection": {
     "status": "connected",
     "mode": "file-backed",
-    "path": "/Users/me/.claude/surrealdb-memory/data",
+    "path": "/Users/me/.claude/engram/data",
     "uptime_seconds": 3600,
     "version": "2.2.1"
   },
@@ -970,7 +970,7 @@ SELECT *, vector::similarity::cosine(embedding, $query_vec) AS score
 Server process starts (spawned by Claude Code via MCP stdio)
   │
   ├─ 1. Load configuration
-  │     Read .claude/surrealdb-memory.local.md (or environment variables)
+  │     Read .claude/engram.local.md (or environment variables)
   │     Determine deployment mode: in-memory | file-backed | remote
   │
   ├─ 2. Initialize embedding model
@@ -1085,11 +1085,11 @@ The plugin registers the MCP server in its `.mcp.json` file, which Claude Code r
 ```json
 {
   "mcpServers": {
-    "surrealdb-memory": {
+    "engram": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.js"],
       "env": {
-        "MEMORY_CONFIG_PATH": "${HOME}/.claude/surrealdb-memory.local.md",
+        "MEMORY_CONFIG_PATH": "${HOME}/.claude/engram.local.md",
         "MEMORY_LOG_LEVEL": "info",
         "NODE_OPTIONS": "--experimental-vm-modules"
       }
@@ -1104,7 +1104,7 @@ The server reads these from the environment (set in `.mcp.json` env or by the pl
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MEMORY_CONFIG_PATH` | Path to the config file | `~/.claude/surrealdb-memory.local.md` |
+| `MEMORY_CONFIG_PATH` | Path to the config file | `~/.claude/engram.local.md` |
 | `MEMORY_LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` | `info` |
 | `MEMORY_DEPLOYMENT_MODE` | Override: `embedded-memory`, `embedded-file`, `local-server`, `remote` | Read from config |
 | `MEMORY_DB_PATH` | Override: file path for embedded-file mode | Read from config |
@@ -1113,12 +1113,12 @@ The server reads these from the environment (set in `.mcp.json` env or by the pl
 
 ### Configuration File Format
 
-The config file at `~/.claude/surrealdb-memory.local.md` is a markdown file with YAML frontmatter (readable by both humans and the server):
+The config file at `~/.claude/engram.local.md` is a markdown file with YAML frontmatter (readable by both humans and the server):
 
 ```markdown
 ---
 deployment_mode: embedded-file
-db_path: ~/.claude/surrealdb-memory/data
+db_path: ~/.claude/engram/data
 namespace: memory
 database: default
 embedding_model: all-MiniLM-L6-v2
@@ -1132,7 +1132,7 @@ log_level: info
 
 This file configures the SurrealDB memory plugin for Claude Code.
 Edit the YAML frontmatter above to change settings.
-Run the setup wizard to regenerate: `claude plugin configure surrealdb-memory`
+Run the setup wizard to regenerate: `claude plugin configure engram`
 
 ## Remote Mode Settings (only used when deployment_mode is "remote")
 
@@ -1197,7 +1197,7 @@ import { registerResources } from './resources/index.js';
 const config = await loadConfig();
 
 const server = new Server({
-  name: 'surrealdb-memory',
+  name: 'engram',
   version: '0.1.0',
 }, {
   capabilities: {
@@ -1316,8 +1316,8 @@ export function registerStoreTool(server, db) {
 ### Authentication
 
 - **Embedded modes:** No authentication needed (single-user, same-process access)
-- **Remote mode:** Credentials stored in `surrealdb-memory.local.md` (which is `.gitignore`'d by convention)
-- The config file should be user-readable only: `chmod 600 ~/.claude/surrealdb-memory.local.md`
+- **Remote mode:** Credentials stored in `engram.local.md` (which is `.gitignore`'d by convention)
+- The config file should be user-readable only: `chmod 600 ~/.claude/engram.local.md`
 
 ### Content Sensitivity
 

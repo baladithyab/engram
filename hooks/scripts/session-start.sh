@@ -1,5 +1,5 @@
 #!/bin/bash
-# SessionStart hook: pull minimal memory context from all scopes
+# SessionStart hook: inject Engram memory system context
 # Outputs JSON with additionalContext for system prompt injection
 #
 # MemEvolve EURM mapping:
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
 # Skip if no data directory exists yet (plugin not initialized)
-DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/surrealdb-memory/data}"
+DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/engram/data}"
 if [ "$SURREAL_MODE" = "embedded" ] && [ ! -d "$DATA_PATH" ]; then
   exit 0
 fi
@@ -26,52 +26,66 @@ if [ "$SURREAL_MODE" = "local" ] || [ "$SURREAL_MODE" = "remote" ]; then
   fi
 fi
 
-# --- Build memory context from all scopes ---
+# --- Build Engram memory context ---
 
-CONTEXT="## Memory System Active
+CONTEXT="## Engram Memory System Active
 
-The surrealdb-memory plugin is connected (mode: ${SURREAL_MODE}).
+Engram is connected (mode: ${SURREAL_MODE}). Persistent, hierarchical, self-evolving memory powered by SurrealDB.
 
-### Memory Hierarchy
-Memory is organized in three tiers, each in its own SurrealDB database:
-- **User** — cross-project knowledge (preferences, patterns, tool expertise)
-- **Project** — codebase-specific knowledge (architecture, conventions, past decisions)
-- **Session** — current conversation only (working memory, scratchpad)
+**FIRST ACTION: Call \`recall_memories\` with a query describing the current project or task to load relevant context from past sessions.**
 
-### Available Tools
-Use these MCP tools for memory operations:
-- \`store_memory\` — persist knowledge (choose scope: session/project/user)
-- \`recall_memories\` — search across all scopes (weighted: session 1.5x, project 1.0x, user 0.7x)
-- \`search_knowledge_graph\` — traverse entity relationships
-- \`reflect_and_consolidate\` — review and promote/archive memories
+### Memory Hierarchy (3 scopes, each its own SurrealDB database)
+- **Session** — current conversation working memory (1.5x retrieval weight)
+- **Project** — codebase knowledge persisting across sessions (1.0x weight)
+- **User** — cross-project knowledge and preferences (0.7x weight)
+
+### Available MCP Tools
+
+**Core (Phase 1):**
+- \`store_memory\` — persist knowledge (scope: session/project/user, type: episodic/semantic/procedural/working)
+- \`recall_memories\` — BM25 search across all scopes with weighted merge and memory_strength scoring
+- \`search_knowledge_graph\` — entity search + graph traversal (1-3 hops)
+- \`reflect_and_consolidate\` — promote, archive, deduplicate memories
 - \`promote_memory\` — move memory to a higher scope
+- \`update_memory\` — update content, tags, or importance
+- \`tag_memory\` — add tags (additive)
 - \`forget_memory\` — soft-delete outdated information
+- \`get_memory_status\` — per-scope counts and connection info
 
-### Memory Lifecycle (MemEvolve-inspired)
-Memories follow: active → consolidated → archived → forgotten
-- The Stop hook automatically consolidates session learnings at session end
-- Memories decay over time (episodic: 1d half-life, semantic: 7d, procedural: 30d)
-- Each recall strengthens the memory (access-based reinforcement)
-- Session memories worth keeping get promoted to project scope
+**Code Intelligence (Phase 3):**
+- \`engram_explore\` — natural language codebase queries via memory-augmented retrieval
+- \`engram_execute\` — validated SurrealQL execution with AST safety checks
+- \`recall_skill\` — retrieve procedural memories as executable skill patterns
+- \`mark_retrieval_useful\` — feedback signal to tune retrieval strategy
 
-### How to Use Memory Effectively
-- After making architectural decisions, use \`store_memory\` with type=semantic, scope=project
-- After discovering debugging patterns, use type=procedural, scope=project
-- For cross-project knowledge (tool preferences, coding style), use scope=user
-- Use \`recall_memories\` before starting complex tasks to check what's known
-- The /remember, /recall, /forget commands provide a convenient interface
+**Observability (Phase 4):**
+- \`memory_peek\` — inspect raw memory records by ID
+- \`memory_partition\` — view scope database sizes and distribution
+- \`memory_aggregate\` — statistics across memory types, scopes, and decay states
 
-### Pre/Post Compact
-Before compaction, key context is saved to session memory.
-After compaction, use \`recall_memories\` to recover important context."
+**Evolution (Phase 5):**
+- \`evolve_memory_system\` — adjust decay rates, scope weights, promotion thresholds
+
+### Memory Lifecycle
+Memories follow: active -> consolidated -> archived -> forgotten
+- Exponential decay: working (~1h), episodic (1d), semantic (7d), procedural (30d)
+- Each recall strengthens the memory (access_count extends effective half-life by 20%)
+- The Stop hook consolidates session learnings automatically
+- High-value session memories promote to project scope (importance >= 0.5, access >= 2)
+
+### Usage Patterns
+- Start tasks by calling \`recall_memories\` to check what's already known
+- Store architectural decisions as type=semantic, scope=project, importance=0.8
+- Store debugging patterns as type=procedural, scope=project, importance=0.7
+- Store cross-project knowledge with scope=user
+- Use /remember, /recall, /forget commands for manual control"
 
 # Output as JSON with additionalContext for system prompt injection
-# Escape the context for JSON (handle newlines and quotes)
 ESCAPED_CONTEXT=$(printf '%s' "$CONTEXT" | python3 -c "
 import sys, json
 content = sys.stdin.read()
 print(json.dumps(content))
-" 2>/dev/null || echo '"Memory system active."')
+" 2>/dev/null || echo '"Engram memory system active. Call recall_memories to load context."')
 
 cat << EOF
 {
@@ -81,5 +95,5 @@ cat << EOF
 }
 EOF
 
-log_info "SessionStart: injected memory context (mode: $SURREAL_MODE)"
+log_info "SessionStart: injected Engram context (mode: $SURREAL_MODE)"
 exit 0

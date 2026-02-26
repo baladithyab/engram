@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ALL_SCHEMA_SQL } from "./schema.js";
+import type { EmbeddingProvider } from "./embeddings/provider.js";
 
 export type DeploymentMode = "embedded" | "local" | "remote" | "memory";
 
@@ -14,6 +15,11 @@ export interface SurrealDBConfig {
   password: string;
   namespace: string;
   database: string;
+  embeddingProvider?: string;
+  embeddingUrl?: string;
+  embeddingModel?: string;
+  embeddingApiKey?: string;
+  embeddingDimensions?: number;
 }
 
 /**
@@ -45,7 +51,8 @@ export function generateScopeIds(): ScopeIdentifiers {
 }
 
 /**
- * Read plugin config from .claude/surrealdb-memory.local.md YAML frontmatter.
+ * Read plugin config from .claude/engram.local.md YAML frontmatter.
+ * Falls back to .claude/surrealdb-memory.local.md for backwards compatibility.
  * Returns partial config — caller merges with defaults.
  */
 export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
@@ -56,7 +63,11 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
   ].filter(Boolean) as string[];
 
   for (const root of roots) {
-    const configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    // Try new name first, then legacy name
+    let configPath = join(root, ".claude", "engram.local.md");
+    if (!existsSync(configPath)) {
+      configPath = join(root, ".claude", "surrealdb-memory.local.md");
+    }
     if (!existsSync(configPath)) continue;
 
     try {
@@ -98,6 +109,21 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
           case "database":
             config.database = value;
             break;
+          case "embedding_provider":
+            config.embeddingProvider = value;
+            break;
+          case "embedding_url":
+            config.embeddingUrl = value;
+            break;
+          case "embedding_model":
+            config.embeddingModel = value;
+            break;
+          case "embedding_api_key":
+            config.embeddingApiKey = value;
+            break;
+          case "embedding_dimensions":
+            config.embeddingDimensions = parseInt(value, 10) || undefined;
+            break;
         }
       }
 
@@ -115,11 +141,13 @@ export class SurrealDBClient {
   private config: SurrealDBConfig;
   private connected = false;
   private scopeIds: ScopeIdentifiers;
+  private embedder: EmbeddingProvider | null;
 
-  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers) {
+  constructor(config: SurrealDBConfig, scopeIds?: ScopeIdentifiers, embedder?: EmbeddingProvider) {
     this.config = config;
     this.db = new Surreal();
     this.scopeIds = scopeIds ?? generateScopeIds();
+    this.embedder = embedder ?? null;
   }
 
   async connect(): Promise<void> {
@@ -153,7 +181,7 @@ export class SurrealDBClient {
     switch (this.config.mode) {
       case "embedded":
         // SurrealKV embedded — persistent, zero-config
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
       case "local":
         // Local SurrealDB server via WebSocket
         return this.config.url ?? "ws://localhost:8000";
@@ -164,7 +192,7 @@ export class SurrealDBClient {
         // In-memory mode — fast, ephemeral (data lost on close unless exported)
         return "mem://";
       default:
-        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`}`;
+        return `surrealkv://${this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`}`;
     }
   }
 
@@ -234,6 +262,16 @@ export class SurrealDBClient {
     }
   }
 
+  /**
+   * Public wrapper around withScope() for running arbitrary SurrealQL in a given scope.
+   */
+  async queryInScope<T = unknown>(scope: string, surql: string, vars?: Record<string, unknown>): Promise<T[]> {
+    return this.withScope(scope, async () => {
+      const result = await this.db.query(surql, vars);
+      return result.flat() as T[];
+    });
+  }
+
   async storeMemory(params: {
     content: string;
     memoryType: string;
@@ -243,6 +281,16 @@ export class SurrealDBClient {
     importance?: number;
     metadata?: Record<string, unknown>;
   }): Promise<unknown> {
+    // Auto-generate embedding if provider exists and none supplied
+    let embedding = params.embedding ?? null;
+    if (!embedding && this.embedder) {
+      try {
+        embedding = await this.embedder.embed(params.content);
+      } catch (err) {
+        console.error("Embedding generation failed, storing without embedding:", err);
+      }
+    }
+
     return this.withScope(params.scope, async () => {
       const [result] = await this.db.query(
         `CREATE memory SET
@@ -262,7 +310,7 @@ export class SurrealDBClient {
           memory_type: params.memoryType,
           scope: params.scope,
           tags: params.tags ?? [],
-          embedding: params.embedding ?? null,
+          embedding,
           importance: params.importance ?? 0.5,
           metadata: params.metadata ?? null,
         }
@@ -282,8 +330,18 @@ export class SurrealDBClient {
     memoryType?: string;
     limit?: number;
   }): Promise<unknown[]> {
+    // Generate query embedding if embedder available (non-critical)
+    let queryEmbedding: number[] | null = null;
+    if (this.embedder) {
+      try {
+        queryEmbedding = await this.embedder.embed(params.query);
+      } catch {
+        // Embedding generation failed — fall back to BM25-only
+      }
+    }
+
     const buildQuery = () => {
-      let surql = `SELECT *, search::score(1) AS relevance
+      let surql = `SELECT *, search::score(1) AS relevance, memory_strength
         FROM memory
         WHERE content @1@ $query
           AND status = 'active'`;
@@ -292,15 +350,22 @@ export class SurrealDBClient {
         surql += ` AND memory_type = $memory_type`;
       }
 
-      surql += ` ORDER BY relevance DESC LIMIT $limit`;
+      if (queryEmbedding) {
+        surql += ` ORDER BY (search::score(1) * 0.3 + vector::similarity::cosine(embedding, $embedding) * 0.3 + memory_strength * 0.4) DESC LIMIT $limit`;
+      } else {
+        surql += ` ORDER BY (search::score(1) * 0.6 + memory_strength * 0.4) DESC LIMIT $limit`;
+      }
       return surql;
     };
 
-    const vars = {
+    const vars: Record<string, unknown> = {
       query: params.query,
       memory_type: params.memoryType ?? null,
       limit: params.limit ?? 10,
     };
+    if (queryEmbedding) {
+      vars.embedding = queryEmbedding;
+    }
 
     let allMemories: any[] = [];
 
@@ -352,6 +417,31 @@ export class SurrealDBClient {
           // Non-critical — strengthening failure shouldn't break recall
         }
       }
+    }
+
+    // Log retrieval event in project scope (non-critical)
+    try {
+      await this.withScope("project", async () => {
+        await this.db.query(
+          `CREATE retrieval_log SET
+            event_type = 'search',
+            query = $query,
+            strategy = $strategy,
+            results_count = $count,
+            memory_ids = $ids,
+            session_id = $session_id,
+            created_at = time::now()`,
+          {
+            query: params.query,
+            strategy: queryEmbedding ? "hybrid" : "bm25",
+            count: allMemories.length,
+            ids: allMemories.filter((m: any) => m?.id).map((m: any) => m.id),
+            session_id: this.scopeIds.sessionId,
+          }
+        );
+      });
+    } catch {
+      // Retrieval logging is non-critical — don't break recall
     }
 
     return allMemories;
@@ -426,7 +516,7 @@ export class SurrealDBClient {
    */
   private async exportMemorySnapshot(): Promise<void> {
     try {
-      const dataPath = this.config.dataPath ?? `${process.env.HOME}/.claude/surrealdb-memory/data`;
+      const dataPath = this.config.dataPath ?? `${process.env.HOME}/.claude/engram/data`;
       const { mkdirSync, writeFileSync } = await import("node:fs");
 
       mkdirSync(dataPath, { recursive: true });

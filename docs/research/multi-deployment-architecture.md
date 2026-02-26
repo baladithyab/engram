@@ -63,7 +63,7 @@ Session Start                          Session End
 surreal start memory              surreal export --conn ws://...
     │                                      │
     ▼                                      ▼
-snapshot exists?                  .claude/surrealdb-memory/
+snapshot exists?                  .claude/engram/
   ├─ yes → surreal import            snapshots/{timestamp}.surql
   └─ no  → fresh start
 ```
@@ -71,7 +71,7 @@ snapshot exists?                  .claude/surrealdb-memory/
 **Snapshot directory structure:**
 
 ```
-.claude/surrealdb-memory/snapshots/
+.claude/engram/snapshots/
   latest.surql              ← symlink to most recent
   2026-02-23T083000.surql   ← timestamped snapshots
   2026-02-22T143000.surql
@@ -94,13 +94,13 @@ Keep last 5 snapshots by default; configurable via `persistence.max_snapshots`.
 |----------|-------|
 | Engine | `rocksdb` or `surrealkv` |
 | Persistence | Continuous (on-disk) |
-| Startup command | `surreal start rocksdb://.claude/surrealdb-memory/data --bind 0.0.0.0:{{port}}` |
+| Startup command | `surreal start rocksdb://.claude/engram/data --bind 0.0.0.0:{{port}}` |
 | User persona | Individual developer, daily use |
 | Requires | `surreal` binary on PATH |
 
 **How it works:**
 
-1. Check for existing PID file at `.claude/surrealdb-memory/surreal.pid`.
+1. Check for existing PID file at `.claude/engram/surreal.pid`.
 2. If PID exists and process is alive, reuse the connection.
 3. If no running instance, spawn `surreal start` with file-backed engine.
 4. Write PID file immediately after spawn.
@@ -109,7 +109,7 @@ Keep last 5 snapshots by default; configurable via `persistence.max_snapshots`.
 **PID management:**
 
 ```bash
-PID_FILE=".claude/surrealdb-memory/surreal.pid"
+PID_FILE=".claude/engram/surreal.pid"
 
 start_surreal() {
     if [ -f "$PID_FILE" ]; then
@@ -179,10 +179,10 @@ will note the option.
 **Container management:**
 
 ```bash
-CONTAINER_NAME="surrealdb-memory"
+CONTAINER_NAME="engram"
 IMAGE="surrealdb/surrealdb:latest"
 PORT=8000
-DATA_DIR="$(pwd)/.claude/surrealdb-memory/docker-data"
+DATA_DIR="$(pwd)/.claude/engram/docker-data"
 
 start_docker() {
     # Check if container exists
@@ -214,13 +214,13 @@ health_check() {
 **docker-compose.yml template:**
 
 ```yaml
-# .claude/surrealdb-memory/docker-compose.yml
+# .claude/engram/docker-compose.yml
 version: '3.8'
 
 services:
   surrealdb:
     image: surrealdb/surrealdb:latest
-    container_name: surrealdb-memory
+    container_name: engram
     restart: unless-stopped
     ports:
       - "${SURREALDB_PORT:-8000}:8000"
@@ -400,12 +400,12 @@ detect_environment() {
     fi
 
     # Check for existing config
-    if [ -f ".claude/surrealdb-memory.local.md" ]; then
+    if [ -f ".claude/engram.local.md" ]; then
         results+=("existing_config: found")
     fi
 
     # Check for existing data
-    if [ -d ".claude/surrealdb-memory/data" ]; then
+    if [ -d ".claude/engram/data" ]; then
         results+=("existing_data: found")
     fi
 }
@@ -467,17 +467,17 @@ Each mode has its own configuration prompts:
 - Snapshot on exit? (default: yes)
 
 **Local-file:**
-- Data path (default: `.claude/surrealdb-memory/data`)
+- Data path (default: `.claude/engram/data`)
 - Engine: rocksdb or surrealkv (default: rocksdb)
 - Port (default: 8000)
 - Auto-start on session? (default: yes)
 - Auto-stop on session end? (default: yes)
 
 **Docker:**
-- Container name (default: `surrealdb-memory`)
+- Container name (default: `engram`)
 - Image (default: `surrealdb/surrealdb:latest`)
 - Port (default: 8000)
-- Data path for volume mount (default: `.claude/surrealdb-memory/docker-data`)
+- Data path for volume mount (default: `.claude/engram/docker-data`)
 
 **Installed:**
 - Connection URL (default: `ws://localhost:8000`)
@@ -524,10 +524,10 @@ See [[SurrealDB Schema]] for the full schema definition.
 
 ### Step 6: Write Config
 
-Write configuration to `.claude/surrealdb-memory.local.md` (see [[#3. Configuration File]]).
+Write configuration to `.claude/engram.local.md` (see [[#3. Configuration File]]).
 
 ```
-Configuration written to .claude/surrealdb-memory.local.md
+Configuration written to .claude/engram.local.md
 
 Setup complete. The memory plugin is ready.
 Run /memory-status to verify, or start using memory naturally in conversation.
@@ -537,7 +537,7 @@ Run /memory-status to verify, or start using memory naturally in conversation.
 
 ## 3. Configuration File
 
-**Location:** `.claude/surrealdb-memory.local.md`
+**Location:** `.claude/engram.local.md`
 
 This is an Obsidian-compatible markdown file with YAML frontmatter. The `.local.md`
 suffix signals it should be in `.gitignore` (contains credentials and machine-specific paths).
@@ -563,21 +563,21 @@ connection:
 
 # Local process management (in-memory and local-file modes)
 local:
-  data_path: .claude/surrealdb-memory/data
+  data_path: .claude/engram/data
   engine: rocksdb       # rocksdb | surrealkv (local-file only)
   port: 8000
   auto_start: true      # start SurrealDB on MCP server startup
   auto_stop: true       # stop SurrealDB on MCP server shutdown
-  pid_file: .claude/surrealdb-memory/surreal.pid
+  pid_file: .claude/engram/surreal.pid
   log_level: info       # error | warn | info | debug | trace
   startup_timeout_ms: 5000
 
 # Docker settings (docker mode)
 docker:
-  container_name: surrealdb-memory
+  container_name: engram
   image: surrealdb/surrealdb:latest
   port: 8000
-  data_path: .claude/surrealdb-memory/docker-data
+  data_path: .claude/engram/docker-data
   auto_start: true
   auto_stop: false      # keep container running between sessions
   restart_policy: unless-stopped
@@ -585,7 +585,7 @@ docker:
 # Persistence settings
 persistence:
   snapshot_on_stop: true             # export data when session ends
-  snapshot_path: .claude/surrealdb-memory/snapshots
+  snapshot_path: .claude/engram/snapshots
   export_format: surql               # surql | json
   max_snapshots: 5                   # keep last N snapshots
   auto_backup_interval_hours: 0      # 0 = disabled
@@ -615,7 +615,7 @@ to change settings. Run `/memory-setup` again to reconfigure interactively.
 
 ## Mode: local-file
 
-Using RocksDB-backed local storage at `.claude/surrealdb-memory/data`.
+Using RocksDB-backed local storage at `.claude/engram/data`.
 SurrealDB will auto-start when Claude Code opens and auto-stop on exit.
 
 ## Notes
@@ -630,7 +630,7 @@ SurrealDB will auto-start when Claude Code opens and auto-stop on exit.
 Configuration values resolve in this order (later overrides earlier):
 
 1. **Built-in defaults** — hardcoded in the MCP server
-2. **Config file** — `.claude/surrealdb-memory.local.md` frontmatter
+2. **Config file** — `.claude/engram.local.md` frontmatter
 3. **Environment variables** — `SURREALDB_MEMORY_*` prefix
 4. **`${VAR}` expansion** — config values containing `${ENV_VAR}` are expanded
 
@@ -815,13 +815,13 @@ Exporting memory data...
   Source: local-file (ws://localhost:8000)
   Tables: memory_node (142 records), memory_edge (87 records), session_log (23 records)
 
-  Exported to: .claude/surrealdb-memory/exports/2026-02-23T120000.surql (48 KB)
+  Exported to: .claude/engram/exports/2026-02-23T120000.surql (48 KB)
 ```
 
 ### Import to Any Mode
 
 ```
-/memory-migrate import .claude/surrealdb-memory/exports/2026-02-23T120000.surql
+/memory-migrate import .claude/engram/exports/2026-02-23T120000.surql
 
 Importing memory data...
   Target: docker (ws://localhost:8000)
@@ -909,7 +909,7 @@ State Machine:
 When in DEGRADED mode, write operations are queued to a local append-only file:
 
 ```
-.claude/surrealdb-memory/write-queue.jsonl
+.claude/engram/write-queue.jsonl
 ```
 
 Each line is a JSON object:

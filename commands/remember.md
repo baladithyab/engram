@@ -9,7 +9,7 @@ arguments:
     required: false
 ---
 
-Store a memory using the `store_memory` MCP tool from the surrealdb-memory server.
+Store a memory using the `store_memory` MCP tool from the engram server.
 
 If content was provided as an argument, store it directly. Otherwise, ask what to remember.
 

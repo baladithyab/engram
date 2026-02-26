@@ -9,7 +9,7 @@ arguments:
     required: true
 ---
 
-Search for memories using the `recall_memories` MCP tool from the surrealdb-memory server.
+Search for memories using the `recall_memories` MCP tool from the engram server.
 
 Pass the query to `recall_memories`. Display results clearly with:
 - Memory content

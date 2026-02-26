@@ -7,17 +7,17 @@ argument-hint: "[show|mode|path|url]"
 
 # Memory Configuration
 
-Quick configuration management for the surrealdb-memory plugin.
+Quick configuration management for the engram plugin.
 
 ## If no argument or "show"
 
-Read and display `.claude/surrealdb-memory.local.md` using the Read tool.
+Read and display `.claude/engram.local.md` using the Read tool.
 Show the current settings in a clean table format:
 
 | Setting | Value |
 |---------|-------|
 | Mode | embedded |
-| Data Path | ~/.claude/surrealdb-memory/data |
+| Data Path | ~/.claude/engram/data |
 | ... | ... |
 
 Also run `get_memory_status` to show live connection status and memory counts.
@@ -30,21 +30,21 @@ Use `AskUserQuestion` to let the user switch deployment mode:
 - Local Server (ws://localhost:8000)
 - Remote (SurrealDB Cloud)
 
-After selection, update the `mode` field in `.claude/surrealdb-memory.local.md` using Edit tool.
+After selection, update the `mode` field in `.claude/engram.local.md` using Edit tool.
 Warn that Claude Code restart is needed for hooks to pick up the change.
 
 ## If "path" argument
 
 Use `AskUserQuestion` to change the data storage path:
-- Default (~/.claude/surrealdb-memory/data/)
-- Project-local (.claude/surrealdb-memory/data/)
+- Default (~/.claude/engram/data/)
+- Project-local (.claude/engram/data/)
 - Custom path
 
-Update `data_path` in `.claude/surrealdb-memory.local.md`.
+Update `data_path` in `.claude/engram.local.md`.
 
 ## If "url" argument
 
-Ask for the new SurrealDB URL. Update `url` in `.claude/surrealdb-memory.local.md`.
+Ask for the new SurrealDB URL. Update `url` in `.claude/engram.local.md`.
 Only relevant for local/remote modes.
 
 ## After any change

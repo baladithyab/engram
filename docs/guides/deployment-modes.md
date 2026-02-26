@@ -1,6 +1,6 @@
 # Deployment Modes
 
-The surrealdb-memory plugin supports five deployment modes. Each uses the same
+The engram plugin supports five deployment modes. Each uses the same
 memory operations and MCP tools -- only the database backend changes.
 
 ## Mode Comparison
@@ -29,7 +29,7 @@ directory. The SurrealDB engine runs inside the Bun process itself.
 // From mcp/src/index.ts
 const db = new SurrealDBClient({
   mode: "embedded",
-  dataPath: process.env.SURREAL_DATA_PATH ?? `${process.env.HOME}/.claude/surrealdb-memory/data`,
+  dataPath: process.env.SURREAL_DATA_PATH ?? `${process.env.HOME}/.claude/engram/data`,
   username: "root",
   password: "root",
   namespace: "memory",
@@ -40,12 +40,12 @@ const db = new SurrealDBClient({
 The connection endpoint resolves to:
 
 ```
-surrealkv:///Users/you/.claude/surrealdb-memory/data
+surrealkv:///Users/you/.claude/engram/data
 ```
 
 ### Data Location
 
-By default: `~/.claude/surrealdb-memory/data/`
+By default: `~/.claude/engram/data/`
 
 This is a directory of SurrealKV files that persist across sessions. To change it,
 set the `SURREAL_DATA_PATH` environment variable or configure `local.data_path`
@@ -57,7 +57,7 @@ No setup required. Just install dependencies and launch:
 
 ```bash
 cd mcp && bun install
-claude --plugin-dir /path/to/surrealdb-memory
+claude --plugin-dir /path/to/engram
 ```
 
 ### Trade-offs
@@ -101,7 +101,7 @@ local:
 
 persistence:
   snapshot_on_stop: true
-  snapshot_path: .claude/surrealdb-memory/snapshots
+  snapshot_path: .claude/engram/snapshots
   max_snapshots: 5
 ---
 ```
@@ -109,7 +109,7 @@ persistence:
 ### Snapshot Directory
 
 ```
-.claude/surrealdb-memory/snapshots/
+.claude/engram/snapshots/
   latest.surql              # symlink to most recent
   2026-02-23T083000.surql   # timestamped snapshots
   2026-02-22T143000.surql
@@ -136,9 +136,9 @@ for persistent, on-disk storage via a local WebSocket connection.
 
 ### How it Works
 
-1. Plugin checks for a PID file at `.claude/surrealdb-memory/surreal.pid`
+1. Plugin checks for a PID file at `.claude/engram/surreal.pid`
 2. If a live process exists, reuses the connection
-3. If not, spawns `surreal start rocksdb://.claude/surrealdb-memory/data --bind 0.0.0.0:8000`
+3. If not, spawns `surreal start rocksdb://.claude/engram/data --bind 0.0.0.0:8000`
 4. Writes PID file
 5. On shutdown (if `auto_stop: true`), sends SIGTERM and removes PID file
 
@@ -156,12 +156,12 @@ connection:
   database: default
 
 local:
-  data_path: .claude/surrealdb-memory/data
+  data_path: .claude/engram/data
   engine: rocksdb
   port: 8000
   auto_start: true
   auto_stop: true
-  pid_file: .claude/surrealdb-memory/surreal.pid
+  pid_file: .claude/engram/surreal.pid
   log_level: info
   startup_timeout_ms: 5000
 ---
@@ -205,7 +205,7 @@ SurrealDB runs in a Docker container with a volume mount for data persistence.
 
 ### How it Works
 
-1. Plugin checks if a container named `surrealdb-memory` exists
+1. Plugin checks if a container named `engram` exists
 2. If stopped, starts it. If missing, creates a new one.
 3. Waits for health check (`surreal isready`)
 4. Connects via WebSocket
@@ -224,10 +224,10 @@ connection:
   database: default
 
 docker:
-  container_name: surrealdb-memory
+  container_name: engram
   image: surrealdb/surrealdb:latest
   port: 8000
-  data_path: .claude/surrealdb-memory/docker-data
+  data_path: .claude/engram/docker-data
   auto_start: true
   auto_stop: false
   restart_policy: unless-stopped
@@ -240,10 +240,10 @@ If you prefer to manage the container yourself:
 
 ```bash
 docker run -d \
-  --name surrealdb-memory \
+  --name engram \
   --restart unless-stopped \
   -p 8000:8000 \
-  -v "$(pwd)/.claude/surrealdb-memory/docker-data:/data" \
+  -v "$(pwd)/.claude/engram/docker-data:/data" \
   surrealdb/surrealdb:latest \
   start --user root --pass root rocksdb:///data/db --log info
 ```
@@ -251,13 +251,13 @@ docker run -d \
 Or with docker-compose:
 
 ```yaml
-# .claude/surrealdb-memory/docker-compose.yml
+# .claude/engram/docker-compose.yml
 version: '3.8'
 
 services:
   surrealdb:
     image: surrealdb/surrealdb:latest
-    container_name: surrealdb-memory
+    container_name: engram
     restart: unless-stopped
     ports:
       - "${SURREALDB_PORT:-8000}:8000"
@@ -374,7 +374,7 @@ surreal import --conn ws://localhost:8000 \
 ### Step-by-Step Mode Switch
 
 1. Export data from current mode (see above)
-2. Edit `.claude/surrealdb-memory.local.md` to set the new `mode`
+2. Edit `.claude/engram.local.md` to set the new `mode`
 3. Restart Claude Code (the MCP server picks up the new config)
 4. Import data into the new backend
 5. Verify with `/memory-status`
@@ -383,7 +383,7 @@ surreal import --conn ws://localhost:8000 \
 
 ```bash
 # 1. Start a local SurrealDB server
-surreal start rocksdb://.claude/surrealdb-memory/data \
+surreal start rocksdb://.claude/engram/data \
   --bind 0.0.0.0:8000 --user root --pass root
 
 # 2. The embedded data is already on disk at the same path,
@@ -391,7 +391,7 @@ surreal start rocksdb://.claude/surrealdb-memory/data \
 #    should preserve everything. Update config:
 #    mode: local
 #    connection.url: ws://localhost:8000
-#    local.data_path: .claude/surrealdb-memory/data
+#    local.data_path: .claude/engram/data
 
 # 3. Restart Claude Code and verify
 ```

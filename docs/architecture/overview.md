@@ -8,7 +8,7 @@
 
 ## What This Plugin Does
 
-`surrealdb-memory` is a Claude Code plugin that gives Claude persistent, hierarchical,
+`engram` is a Claude Code plugin that gives Claude persistent, hierarchical,
 self-evolving memory powered by SurrealDB. Instead of starting every conversation from
 scratch, Claude retains knowledge across sessions -- codebase architecture, past decisions,
 error patterns, coding conventions, and personal preferences.
@@ -99,7 +99,7 @@ natively:
 ### 2. Zero-config default
 
 The plugin ships with embedded SurrealKV as the default backend. No external database
-to install, no Docker, no configuration. Data persists at `~/.claude/surrealdb-memory/data`.
+to install, no Docker, no configuration. Data persists at `~/.claude/engram/data`.
 Advanced users can switch to local server, Docker, or remote deployments via
 configuration. See [Deployment Modes](deployment-modes.md).
 

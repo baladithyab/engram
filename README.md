@@ -1,4 +1,4 @@
-# surrealdb-memory
+# engram
 
 Persistent, hierarchical, self-evolving memory for [Claude Code](https://claude.com/claude-code), powered by [SurrealDB](https://surrealdb.com).
 
@@ -14,20 +14,20 @@ Most memory systems (Mem0, Zep, etc.) bolt together 3-4 databases — Postgres f
 
 ```bash
 # Clone
-git clone https://github.com/baladithyab/surrealdb-memory.git
-cd surrealdb-memory
+git clone https://github.com/baladithyab/engram.git
+cd engram
 
 # Install MCP server dependencies
 cd mcp && bun install && cd ..
 
 # Load the plugin in Claude Code
-claude --plugin-dir /path/to/surrealdb-memory
+claude --plugin-dir /path/to/engram
 ```
 
 That's it. The plugin auto-configures on first run:
-- Creates `.claude/surrealdb-memory.local.md` with default settings
+- Creates `.claude/engram.local.md` with default settings
 - Uses embedded SurrealDB (no separate process needed)
-- Persists data at `~/.claude/surrealdb-memory/data/`
+- Persists data at `~/.claude/engram/data/`
 
 ## How It Works
 
@@ -101,7 +101,7 @@ Claude uses these tools directly (auto-approved, no permission prompts):
 | **Local Server** | `ws://localhost:8000` | Shared dev, Surrealist GUI |
 | **Remote** | `wss://cloud.surrealdb.com` | Teams, multi-machine |
 
-Configure via `/memory-setup`, `.env` file, or `.claude/surrealdb-memory.local.md`.
+Configure via `/memory-setup`, `.env` file, or `.claude/engram.local.md`.
 
 ## Architecture
 
@@ -141,7 +141,7 @@ cd mcp && bun install
 bun run typecheck
 
 # Test with plugin
-claude --plugin-dir /path/to/surrealdb-memory
+claude --plugin-dir /path/to/engram
 ```
 
 See [Developer Guide](docs/guides/developing.md) for how to add tools, hooks, and commands.

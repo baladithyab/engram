@@ -1,4 +1,4 @@
-# surrealdb-memory — Claude Code Memory Plugin
+# engram — Claude Code Memory Plugin
 
 Persistent, hierarchical, self-evolving memory for Claude Code powered by SurrealDB.
 Single database replaces the typical Postgres+Neo4j+Qdrant+Redis stack.
@@ -20,7 +20,7 @@ claude --plugin-dir .          # test plugin in Claude Code
 ### Plugin Structure
 
 ```
-surrealdb-memory/
+engram/
 ├── .claude-plugin/plugin.json    ← Plugin manifest
 ├── .mcp.json                     ← MCP server config (embedded SurrealKV default)
 ├── commands/                     ← /remember, /recall, /forget, /memory-status, /memory-setup, /memory-config
@@ -43,7 +43,7 @@ surrealdb-memory/
 - **Runtime:** Bun + TypeScript
 - **Database:** SurrealDB 3.0 embedded via `@surrealdb/node` (SurrealKV backend)
 - **Search:** BM25 full-text + HNSW vector indexes (embeddings generation in Phase 2)
-- **Config:** `.claude/surrealdb-memory.local.md` YAML frontmatter, overridable by `.env` or env vars
+- **Config:** `.claude/engram.local.md` YAML frontmatter, overridable by `.env` or env vars
 - **No co-author lines, bylines, or attribution in commits.** Ever.
 
 ## Memory Model — Hierarchical Scoping
@@ -126,7 +126,7 @@ Schema defined in `mcp/src/schema.ts`:
 | `local` | `ws://localhost:8000` | No |
 | `remote` | `wss://...` | No |
 
-Config resolution: `env vars` > `.claude/surrealdb-memory.local.md` > `.mcp.json env` > defaults.
+Config resolution: `env vars` > `.claude/engram.local.md` > `.mcp.json env` > defaults.
 
 ## Implementation Status
 

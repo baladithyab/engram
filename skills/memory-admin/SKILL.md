@@ -64,7 +64,7 @@ DELETE FROM memory WHERE status = 'forgotten' AND updated_at < time::now() - 90d
 
 ## Deployment Mode Management
 
-Current mode is set via `SURREAL_MODE` env var or `.claude/surrealdb-memory.local.md`.
+Current mode is set via `SURREAL_MODE` env var or `.claude/engram.local.md`.
 
 | Mode | Endpoint | Persistence |
 |------|----------|-------------|
@@ -73,7 +73,7 @@ Current mode is set via `SURREAL_MODE` env var or `.claude/surrealdb-memory.loca
 | `local` | `ws://localhost:8000` | Depends on server config |
 | `remote` | `wss://...` | Cloud-managed |
 
-To switch modes, use the `/memory-setup` command or edit `.claude/surrealdb-memory.local.md`.
+To switch modes, use the `/memory-setup` command or edit `.claude/engram.local.md`.
 
 ## Troubleshooting
 
@@ -83,4 +83,4 @@ To switch modes, use the `/memory-setup` command or edit `.claude/surrealdb-memo
 | Empty recall results | No memories stored yet, or wrong scope filter | Try broader search, check scope |
 | Slow queries | Large dataset without proper indexes | Schema auto-creates indexes; check with `INFO FOR TABLE memory` |
 | "record not found" on update | Wrong memory ID format | IDs look like `memory:abc123` — include the table prefix |
-| Snapshot export fails | Data path not writable | Check permissions on `~/.claude/surrealdb-memory/data` |
+| Snapshot export fails | Data path not writable | Check permissions on `~/.claude/engram/data` |

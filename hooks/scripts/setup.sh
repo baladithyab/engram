@@ -6,12 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
 CONFIG_DIR="${CLAUDE_PROJECT_DIR:-.}/.claude"
-CONFIG_FILE="$CONFIG_DIR/surrealdb-memory.local.md"
+CONFIG_FILE="$CONFIG_DIR/engram.local.md"
+LEGACY_CONFIG_FILE="$CONFIG_DIR/surrealdb-memory.local.md"
 
-# If config already exists, just ensure data dir exists and exit
-if [ -f "$CONFIG_FILE" ]; then
+# If config already exists (new or legacy name), just ensure data dir exists and exit
+if [ -f "$CONFIG_FILE" ] || [ -f "$LEGACY_CONFIG_FILE" ]; then
   mkdir -p "${SURREAL_DATA_PATH}" 2>/dev/null || true
-  log_info "Config exists at $CONFIG_FILE, data dir at $SURREAL_DATA_PATH"
+  log_info "Config exists, data dir at $SURREAL_DATA_PATH"
   exit 0
 fi
 
@@ -65,7 +66,7 @@ user_id: ${USER_ID}
 
 # SurrealDB Memory Configuration
 
-Auto-configured on ${CURRENT_DATE} by surrealdb-memory plugin.
+Auto-configured on ${CURRENT_DATE} by engram plugin.
 Detected local SurrealDB instance at localhost:8000.
 
 ${DETECTED_NOTES}
@@ -85,7 +86,7 @@ else
   cat > "$CONFIG_FILE" << EOF
 ---
 mode: embedded
-data_path: ~/.claude/surrealdb-memory/data
+data_path: ~/.claude/engram/data
 namespace: memory
 project_id: ${PROJECT_ID}
 user_id: ${USER_ID}
@@ -93,7 +94,7 @@ user_id: ${USER_ID}
 
 # SurrealDB Memory Configuration
 
-Auto-configured on ${CURRENT_DATE} by surrealdb-memory plugin.
+Auto-configured on ${CURRENT_DATE} by engram plugin.
 Using embedded SurrealKV (zero-config, persistent).
 
 ${DETECTED_NOTES}
@@ -113,20 +114,20 @@ fi
 
 # Ensure data directory exists for embedded mode
 if [ "$DETECTED_MODE" = "embedded" ]; then
-  mkdir -p "${HOME}/.claude/surrealdb-memory/data" 2>/dev/null || true
+  mkdir -p "${HOME}/.claude/engram/data" 2>/dev/null || true
 fi
 
 # Add to .gitignore if not already there
 GITIGNORE="${CLAUDE_PROJECT_DIR:-.}/.gitignore"
 if [ -f "$GITIGNORE" ]; then
-  if ! grep -q 'surrealdb-memory.local.md' "$GITIGNORE" 2>/dev/null; then
+  if ! grep -q 'engram.local.md' "$GITIGNORE" 2>/dev/null; then
     echo "" >> "$GITIGNORE"
-    echo "# SurrealDB Memory plugin config (contains credentials)" >> "$GITIGNORE"
-    echo ".claude/surrealdb-memory.local.md" >> "$GITIGNORE"
+    echo "# Engram plugin config (contains credentials)" >> "$GITIGNORE"
+    echo ".claude/engram.local.md" >> "$GITIGNORE"
   fi
 fi
 
 log_info "Created config at $CONFIG_FILE (mode: $DETECTED_MODE)"
-echo "surrealdb-memory: Auto-configured (mode: ${DETECTED_MODE}). Run /memory-setup to change." >&2
+echo "engram: Auto-configured (mode: ${DETECTED_MODE}). Run /memory-setup to change." >&2
 
 exit 0

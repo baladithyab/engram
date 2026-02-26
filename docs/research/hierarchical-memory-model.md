@@ -66,7 +66,7 @@ The hierarchical memory model gives Claude Code persistent, contextual memory at
 | **Storage** | In-memory SurrealDB | Persistent on disk (project root) | Persistent on disk (home dir) |
 | **SurrealDB namespace** | `session` | `project` | `user` |
 | **SurrealDB database** | `{session_id}` | `{project_path_hash}` | `default` |
-| **File location** | None (in-memory only) | `.claude/surrealdb-memory/` | `~/.claude/surrealdb-memory/` |
+| **File location** | None (in-memory only) | `.claude/engram/` | `~/.claude/engram/` |
 | **Decay rate** | Instant on session end (unless promoted) | Moderate (7-day half-life) | Slow (30-day half-life) |
 | **Max memories** | Unbounded during session | ~10,000 per project | ~5,000 global |
 
@@ -125,7 +125,7 @@ Project memory is the persistent knowledge store for a specific codebase or proj
 
 **Storage characteristics:**
 - SurrealDB persistent mode using file-backed storage
-- Data stored in `.claude/surrealdb-memory/` within the project root
+- Data stored in `.claude/engram/` within the project root
 - Survives across sessions, machine reboots, and git operations
 - `.gitignore` entry recommended (memory is personal, not shared via git)
 - Changefeeds enabled for promotion tracking (7-day retention)
@@ -142,7 +142,7 @@ Project memory is the persistent knowledge store for a specific codebase or proj
 - Namespace: `project`
 - Database: `p_{sha256(canonical_project_path)[:12]}` (deterministic from project path)
 - Connection: file-backed embedded SurrealDB
-- File location: `{project_root}/.claude/surrealdb-memory/`
+- File location: `{project_root}/.claude/engram/`
 
 ### 2c. User Memory
 
@@ -160,7 +160,7 @@ User memory is the highest-level, longest-lived memory store. It captures knowle
 
 **Storage characteristics:**
 - SurrealDB persistent mode using file-backed storage
-- Data stored in `~/.claude/surrealdb-memory/`
+- Data stored in `~/.claude/engram/`
 - Survives across all projects and sessions
 - Backed up with home directory backups
 - Changefeeds enabled (30-day retention)
@@ -175,7 +175,7 @@ User memory is the highest-level, longest-lived memory store. It captures knowle
 - Namespace: `user`
 - Database: `default`
 - Connection: file-backed embedded SurrealDB
-- File location: `~/.claude/surrealdb-memory/`
+- File location: `~/.claude/engram/`
 
 ---
 

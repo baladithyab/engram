@@ -1,12 +1,12 @@
 # Developer Guide
 
-How to contribute to the surrealdb-memory plugin. Covers project structure,
+How to contribute to the engram plugin. Covers project structure,
 adding new components, modifying the schema, and testing.
 
 ## Project Structure
 
 ```
-surrealdb-memory/
+engram/
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest (name, version, entry points)
 ├── .mcp.json                    # MCP server config (command, args, env vars)
@@ -88,7 +88,7 @@ cd mcp && bun run dev
 This starts the server on stdio. To test interactively with Claude Code:
 
 ```bash
-claude --plugin-dir /path/to/surrealdb-memory
+claude --plugin-dir /path/to/engram
 ```
 
 ### Type Checking
@@ -229,7 +229,7 @@ For a command-type hook, create a script in `hooks/scripts/`:
 set -uo pipefail
 
 # Quick exit conditions
-DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/surrealdb-memory/data}"
+DATA_PATH="${SURREAL_DATA_PATH:-$HOME/.claude/engram/data}"
 if [ ! -d "$DATA_PATH" ]; then
   exit 0
 fi
@@ -460,7 +460,7 @@ The primary testing approach during MVP:
 
 1. Launch Claude Code with the plugin:
    ```bash
-   claude --plugin-dir /path/to/surrealdb-memory
+   claude --plugin-dir /path/to/engram
    ```
 
 2. Test the store-recall-forget cycle:

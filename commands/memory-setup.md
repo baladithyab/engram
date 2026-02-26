@@ -7,17 +7,17 @@ argument-hint: "[embedded|local|docker|remote|memory]"
 
 # SurrealDB Memory Setup Wizard
 
-Run the interactive setup wizard for the surrealdb-memory plugin.
+Run the interactive setup wizard for the engram plugin.
 
 ## Step 1: Detect Environment
 
 Before asking the user anything, auto-detect what's available:
 
-1. Check if `.claude/surrealdb-memory.local.md` already exists — if so, read current config
+1. Check if `.claude/engram.local.md` already exists — if so, read current config
 2. Check if SurrealDB is installed: `which surreal` or `surreal version`
 3. Check if Docker is available: `which docker` and `docker info --format '{{.ServerVersion}}'`
 4. Check if a local SurrealDB is already running: `curl -s http://localhost:8000/health`
-5. Check if the data directory exists: `ls ~/.claude/surrealdb-memory/data/`
+5. Check if the data directory exists: `ls ~/.claude/engram/data/`
 
 Report findings to the user before asking for their choice.
 
@@ -33,7 +33,7 @@ Present the question with these options:
 
 **Question:** "How should the memory system store data?"
 **Options:**
-1. **Embedded (Recommended)** — Zero config, data persists at ~/.claude/surrealdb-memory/data/. No separate process needed.
+1. **Embedded (Recommended)** — Zero config, data persists at ~/.claude/engram/data/. No separate process needed.
 2. **In-Memory** — Fast and ephemeral. Data exported to snapshot on session end. Good for testing.
 3. **Local Server** — Connect to a local `surreal start` process. Choose if you want Surrealist GUI access.
 4. **Remote** — Connect to SurrealDB Cloud or a self-hosted instance. For teams and multi-machine.
@@ -46,8 +46,8 @@ Based on chosen mode, ask follow-up questions using `AskUserQuestion`:
 
 **Embedded/In-Memory:**
 - Ask: "Where should memory data be stored?"
-  - Option 1: Default (~/.claude/surrealdb-memory/data/) (Recommended)
-  - Option 2: Project-local (.claude/surrealdb-memory/data/)
+  - Option 1: Default (~/.claude/engram/data/) (Recommended)
+  - Option 2: Project-local (.claude/engram/data/)
   - Option 3: Custom path
 
 **Local:**
@@ -65,7 +65,7 @@ Based on chosen mode, ask follow-up questions using `AskUserQuestion`:
 
 ## Step 4: Write Configuration
 
-Create `.claude/surrealdb-memory.local.md` using the Write tool:
+Create `.claude/engram.local.md` using the Write tool:
 
 ```markdown
 ---

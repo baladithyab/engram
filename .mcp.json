@@ -1,11 +1,11 @@
 {
   "mcpServers": {
-    "surrealdb-memory": {
+    "engram": {
       "command": "bun",
       "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp/src/index.ts"],
       "env": {
         "SURREAL_MODE": "embedded",
-        "SURREAL_DATA_PATH": "${HOME}/.claude/surrealdb-memory/data"
+        "SURREAL_DATA_PATH": "${HOME}/.claude/engram/data"
       }
     }
   }

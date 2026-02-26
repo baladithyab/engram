@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Rename surrealdb-memory to Engram, close Phase 1 EURM gaps, add embedding pipeline, Code Mode interface, recursive memory processing, and MemEvolve meta-evolution.
+**Goal:** Rename engram to Engram, close Phase 1 EURM gaps, add embedding pipeline, Code Mode interface, recursive memory processing, and MemEvolve meta-evolution.
 
 **Architecture:** 4-agent team on isolated worktrees. Agent 1 (Foundation) runs first on the feature branch. Agents 2-4 run in parallel on worktrees after Agent 1 completes. All merge back to `feature/engram-evolution` for PR to main.
 
@@ -15,7 +15,7 @@
 **Step 1: Create feature branch**
 
 ```bash
-cd /Users/baladita/Documents/DevBox/surrealdb-memory
+cd /Users/baladita/Documents/DevBox/engram
 git checkout -b feature/engram-evolution
 ```
 
@@ -34,7 +34,7 @@ git checkout -b feature/engram-evolution
 
 **Step 1: Update plugin.json**
 
-Change `name` from `"surrealdb-memory"` to `"engram"`.
+Change `name` from `"engram"` to `"engram"`.
 
 ```json
 {
@@ -84,7 +84,7 @@ Run: `cd mcp && bun run typecheck`
 
 ```bash
 git add .claude-plugin/plugin.json .mcp.json mcp/package.json
-git commit -m "Rename surrealdb-memory to engram in manifests"
+git commit -m "Rename engram to engram in manifests"
 ```
 
 ### Task 1.2: Rename MCP server entry point
@@ -95,9 +95,9 @@ git commit -m "Rename surrealdb-memory to engram in manifests"
 **Step 1: Update server name and default path**
 
 In `mcp/src/index.ts`:
-- Line 9: Change `name: "surrealdb-memory"` to `name: "engram"`
-- Line 22: Change default dataPath from `~/.claude/surrealdb-memory/data` to `~/.claude/engram/data`
-- Line 54: Change error message from `"surrealdb-memory MCP server"` to `"engram MCP server"`
+- Line 9: Change `name: "engram"` to `name: "engram"`
+- Line 22: Change default dataPath from `~/.claude/engram/data` to `~/.claude/engram/data`
+- Line 54: Change error message from `"engram MCP server"` to `"engram MCP server"`
 
 **Step 2: Typecheck and commit**
 
@@ -114,7 +114,7 @@ git commit -m "Rename MCP server to engram"
 
 **Step 1: Update config file path**
 
-In `readConfig()` (line 59): Change `"surrealdb-memory.local.md"` to `"engram.local.md"`. Add fallback to old path:
+In `readConfig()` (line 59): Change `"engram.local.md"` to `"engram.local.md"`. Add fallback to old path:
 
 ```typescript
 export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
@@ -125,7 +125,7 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
   ].filter(Boolean) as string[];
 
   // Try new name first, fall back to old name for migration
-  const configNames = ["engram.local.md", "surrealdb-memory.local.md"];
+  const configNames = ["engram.local.md", "engram.local.md"];
 
   for (const root of roots) {
     for (const name of configNames) {
@@ -140,7 +140,7 @@ export function readConfig(projectRoot?: string): Partial<SurrealDBConfig> {
 
 **Step 2: Update default data paths**
 
-In `resolveEndpoint()` (lines 156, 167): Change `~/.claude/surrealdb-memory/data` to `~/.claude/engram/data`.
+In `resolveEndpoint()` (lines 156, 167): Change `~/.claude/engram/data` to `~/.claude/engram/data`.
 
 In `exportMemorySnapshot()` (line 429): Same path change.
 
@@ -163,14 +163,14 @@ git commit -m "Rename config paths to engram with fallback"
 
 - Line 3: Comment → `"engram hook scripts"`
 - Line 14: Default path → `$HOME/.claude/engram/data`
-- Lines 21-24: Config search paths → `"engram.local.md"` with `"surrealdb-memory.local.md"` as fallback
+- Lines 21-24: Config search paths → `"engram.local.md"` with `"engram.local.md"` as fallback
 
 ```bash
 _CONFIG_SEARCH_PATHS=(
   "${CLAUDE_PROJECT_ROOT:-.}/.claude/engram.local.md"
-  "${CLAUDE_PROJECT_ROOT:-.}/.claude/surrealdb-memory.local.md"
+  "${CLAUDE_PROJECT_ROOT:-.}/.claude/engram.local.md"
   "${PWD}/.claude/engram.local.md"
-  "${PWD}/.claude/surrealdb-memory.local.md"
+  "${PWD}/.claude/engram.local.md"
 )
 ```
 
@@ -189,7 +189,7 @@ esac
 
 **Step 3: Update hooks.json prompt references**
 
-Lines 60, 70: Change `"surrealdb-memory MCP server"` to `"engram MCP server"`.
+Lines 60, 70: Change `"engram MCP server"` to `"engram MCP server"`.
 
 **Step 4: Commit**
 
@@ -201,7 +201,7 @@ git commit -m "Rename hook scripts to engram"
 ### Task 1.5: Rename all documentation references
 
 **Files:**
-- Modify: `CLAUDE.md` — replace all `surrealdb-memory` with `engram`
+- Modify: `CLAUDE.md` — replace all `engram` with `engram`
 - Modify: All files in `docs/` — same replacement
 - Modify: All files in `commands/`, `skills/`, `agents/` — same replacement
 
@@ -209,13 +209,13 @@ git commit -m "Rename hook scripts to engram"
 
 ```bash
 # Find all files containing old name
-grep -rl "surrealdb-memory" --include="*.md" --include="*.json" . | head -50
+grep -rl "engram" --include="*.md" --include="*.json" . | head -50
 
 # Replace in all markdown files (NOT in .git or node_modules)
-find . -name "*.md" -not -path "./.git/*" -not -path "*/node_modules/*" -exec sed -i '' 's/surrealdb-memory/engram/g' {} +
+find . -name "*.md" -not -path "./.git/*" -not -path "*/node_modules/*" -exec sed -i '' 's/engram/engram/g' {} +
 
 # Verify no stale references remain (except git history)
-grep -r "surrealdb-memory" --include="*.md" --include="*.json" --include="*.ts" --include="*.sh" . | grep -v node_modules | grep -v .git
+grep -r "engram" --include="*.md" --include="*.json" --include="*.ts" --include="*.sh" . | grep -v node_modules | grep -v .git
 ```
 
 **Step 2: Commit**
@@ -474,7 +474,7 @@ cd mcp && bun run typecheck
 **Step 2: Grep for stale references**
 
 ```bash
-grep -r "surrealdb-memory" --include="*.ts" --include="*.sh" --include="*.json" --include="*.md" . | grep -v node_modules | grep -v .git | grep -v "docs/plans/"
+grep -r "engram" --include="*.ts" --include="*.sh" --include="*.json" --include="*.md" . | grep -v node_modules | grep -v .git | grep -v "docs/plans/"
 ```
 
 Expected: No results (plans docs may reference old name in historical context — that's OK).
@@ -494,7 +494,7 @@ git add -A && git status
 ### Task 2.1: Set up worktree
 
 ```bash
-cd /Users/baladita/Documents/DevBox/surrealdb-memory
+cd /Users/baladita/Documents/DevBox/engram
 git worktree add ../engram-embeddings feature/engram-evolution
 cd ../engram-embeddings
 git checkout -b embeddings
@@ -818,7 +818,7 @@ git commit -m "Add embedding config support to config reader"
 ### Task 3.1: Set up worktree
 
 ```bash
-cd /Users/baladita/Documents/DevBox/surrealdb-memory
+cd /Users/baladita/Documents/DevBox/engram
 git worktree add ../engram-codemode feature/engram-evolution
 cd ../engram-codemode
 git checkout -b codemode
@@ -1198,7 +1198,7 @@ git commit -m "Register Code Mode and Skills tools in MCP server"
 ### Task 4.1: Set up worktree
 
 ```bash
-cd /Users/baladita/Documents/DevBox/surrealdb-memory
+cd /Users/baladita/Documents/DevBox/engram
 git worktree add ../engram-recursive feature/engram-evolution
 cd ../engram-recursive
 git checkout -b recursive
@@ -1384,7 +1384,7 @@ git commit -m "Register recursive and evolution tools in MCP server"
 ### Task I.1: Merge worktree branches
 
 ```bash
-cd /Users/baladita/Documents/DevBox/surrealdb-memory
+cd /Users/baladita/Documents/DevBox/engram
 git checkout feature/engram-evolution
 
 # Merge each agent's branch
@@ -1417,7 +1417,7 @@ git branch -d embeddings codemode recursive
 ```bash
 gh pr create --title "Rename to Engram + implement Phases 1-5" --body "$(cat <<'EOF'
 ## Summary
-- Rename surrealdb-memory → Engram throughout
+- Rename engram → Engram throughout
 - Close Phase 1 EURM gaps (retrieval_log, memory_strength ranking, consolidation)
 - Phase 2: Embedding pipeline (local @xenova/transformers + OpenAI-compatible API)
 - Phase 3: Code Mode (engram_explore, engram_execute, recall_skill, mark_retrieval_useful)
