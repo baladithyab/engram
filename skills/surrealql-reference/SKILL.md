@@ -35,7 +35,7 @@ SELECT *, ->wrote->article.title FROM author FETCH wrote;
 The `@1@` operator references a numbered full-text search index:
 
 ```surql
--- With index 1 defined: DEFINE INDEX ft_title ON book FIELDS title SEARCH ANALYZER en BM25;
+-- With index 1 defined: DEFINE INDEX ft_title ON book FIELDS title FULLTEXT ANALYZER en BM25;
 SELECT search::score(1) AS score, search::highlight('<b>', '</b>', 1) AS title
 FROM book
 WHERE title @1@ 'rust web framework'
@@ -226,7 +226,7 @@ DEFINE FIELD tags ON memory TYPE array<string> DEFAULT [];
 DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
 DEFINE FIELD memory_type ON memory TYPE string ASSERT $value IN ['episodic', 'semantic', 'procedural', 'working'];
 DEFINE FIELD embedding ON memory TYPE option<array<float>>;
-DEFINE FIELD metadata ON memory FLEXIBLE TYPE option<object>;
+DEFINE FIELD metadata ON memory TYPE option<object> FLEXIBLE;
 DEFINE FIELD author ON book TYPE record<person> REFERENCE ON DELETE CASCADE;
 
 -- Computed field (not stored, evaluated on read)
@@ -250,7 +250,7 @@ DEFINE FIELD updated_at ON memory TYPE datetime VALUE time::now();
 DEFINE INDEX [IF NOT EXISTS] @name ON TABLE @table
   FIELDS @field [, ...]
   [UNIQUE]
-  [SEARCH ANALYZER @analyzer BM25 [HIGHLIGHTS]]
+  [FULLTEXT ANALYZER @analyzer BM25 [HIGHLIGHTS]]
   [HNSW DIMENSION @dim DIST @distance [@params]]
   [CONCURRENTLY]
   ;
@@ -267,7 +267,7 @@ DEFINE INDEX evolution_key ON evolution_state FIELDS key UNIQUE;
 -- Full-text search (BM25)
 DEFINE INDEX memory_content_search ON memory
   FIELDS content
-  SEARCH ANALYZER memory_analyzer BM25;
+  FULLTEXT ANALYZER memory_analyzer BM25;
 
 -- HNSW vector index
 DEFINE INDEX memory_embedding ON memory
@@ -520,7 +520,7 @@ importance - (hours_since_access * decay_factor);
 
 ```surql
 -- Allows any object, not just specific keys
-DEFINE FIELD metadata ON memory FLEXIBLE TYPE option<object>;
+DEFINE FIELD metadata ON memory TYPE option<object> FLEXIBLE;
 
 -- Without FLEXIBLE, only defined fields allowed in SCHEMAFULL table
 ```
@@ -537,8 +537,8 @@ SELECT * FROM (SELECT * FROM person SPLIT emails) WHERE active = true;
 ### 4. Search Index Numbers
 ```surql
 -- Index @1@ refers to FIRST search index defined
-DEFINE INDEX ft_title ON book FIELDS title SEARCH ANALYZER en BM25;
-DEFINE INDEX ft_content ON book FIELDS content SEARCH ANALYZER en BM25;
+DEFINE INDEX ft_title ON book FIELDS title FULLTEXT ANALYZER en BM25;
+DEFINE INDEX ft_content ON book FIELDS content FULLTEXT ANALYZER en BM25;
 
 -- In WHERE clause:
 WHERE title @1@ 'term'          -- searches ft_title
@@ -621,7 +621,7 @@ DEFINE FIELD memory_strength ON memory COMPUTED
 -- 4. Indexes: standard, full-text, and vector
 DEFINE INDEX memory_scope ON memory FIELDS scope;
 DEFINE INDEX memory_content_search ON memory
-  FIELDS content SEARCH ANALYZER memory_analyzer BM25;
+  FIELDS content FULLTEXT ANALYZER memory_analyzer BM25;
 DEFINE INDEX memory_embedding ON memory
   FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
 
