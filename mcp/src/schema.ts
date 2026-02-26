@@ -55,7 +55,7 @@ export const MEMORY_TABLE_SQL = `
 
   -- BM25 full-text search index
   DEFINE INDEX IF NOT EXISTS memory_content_search ON memory
-    FIELDS content SEARCH ANALYZER memory_analyzer BM25;
+    FIELDS content FULLTEXT ANALYZER memory_analyzer BM25;
 
   -- HNSW vector index for embedding similarity search (Phase 2)
   DEFINE INDEX IF NOT EXISTS memory_embedding ON memory
@@ -139,7 +139,7 @@ export const EVOLUTION_STATE_TABLE_SQL = `
   DEFINE TABLE IF NOT EXISTS evolution_state SCHEMAFULL;
 
   DEFINE FIELD IF NOT EXISTS key ON evolution_state TYPE string;
-  DEFINE FIELD IF NOT EXISTS value ON evolution_state FLEXIBLE TYPE object;
+  DEFINE FIELD IF NOT EXISTS value ON evolution_state TYPE object FLEXIBLE;
   DEFINE FIELD IF NOT EXISTS updated_at ON evolution_state TYPE datetime DEFAULT time::now();
 
   DEFINE INDEX IF NOT EXISTS evolution_key ON evolution_state FIELDS key UNIQUE;
